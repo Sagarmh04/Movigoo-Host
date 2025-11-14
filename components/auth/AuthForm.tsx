@@ -9,13 +9,11 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithPhoneNumber,
-  RecaptchaVerifier
+  RecaptchaVerifier,
 } from "firebase/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
 
 type Props = {
   onAuthenticated?: () => void;
@@ -75,23 +73,26 @@ export default function AuthForm({ onAuthenticated }: Props) {
 
   const recaptchaRef = useRef<HTMLDivElement | null>(null);
 
-useEffect(() => {
-  if (!recaptchaRef.current) return;
+  // === 100% stable Recaptcha initialization ===
+  useEffect(() => {
+    const win: any = window;
+    if (!recaptchaRef.current) return;
 
-  try {
-    (window as any).recaptchaVerifier = new RecaptchaVerifier(
-        auth  ,
-        recaptchaRef.current,         // container DOM element
-        { size: "invisible" }     // config
-                         // Auth instance
-      );
-  } catch (err) {
-    console.log("recaptcha init error:", err);
-  }
-}, []);
+    try {
+      if (!win.recaptchaVerifier) {
+        win.recaptchaVerifier = new RecaptchaVerifier(
+          auth,
+          recaptchaRef.current,
+          { size: "invisible" }
+        );
+        win.recaptchaVerifier.render();
+      }
+    } catch (err) {
+      console.error("Recaptcha create error:", err);
+    }
+  }, []);
 
-
-
+  // Timer
   useEffect(() => {
     if (!resendAvailableAt) {
       setResendCountdown(0);
@@ -187,11 +188,10 @@ useEffect(() => {
 
       try {
         await postRegisterHost(token, email.split("@")[0], null);
-      } catch (err) {
-        console.warn("register-host warning:", err);
-      }
+      } catch (err) {}
 
       await postLogin(token);
+
       toast.success(isRegister ? "Registered & logged in" : "Logged in");
       onAuthenticated?.();
       router.push("/");
@@ -284,8 +284,6 @@ useEffect(() => {
       setVerifyingOtp(false);
     }
   }
-
-  /* ===================== THEMED UI ====================== */
 
   return (
     <div className="w-full max-w-md text-white">
@@ -445,6 +443,7 @@ useEffect(() => {
                 </Button>
               </div>
 
+              {/* REQUIRED FOR OTP TO WORK */}
               <div ref={recaptchaRef} />
             </>
           )}
