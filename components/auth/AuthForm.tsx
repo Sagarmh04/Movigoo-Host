@@ -9,11 +9,13 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithPhoneNumber,
-  RecaptchaVerifier,
+  RecaptchaVerifier
 } from "firebase/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
 
 type Props = {
   onAuthenticated?: () => void;
@@ -74,26 +76,20 @@ export default function AuthForm({ onAuthenticated }: Props) {
   const recaptchaRef = useRef<HTMLDivElement | null>(null);
 
 useEffect(() => {
-  const win: any = window;
   if (!recaptchaRef.current) return;
 
-  // Prevent double initialization
-  if (!win.recaptchaVerifier) {
-    try {
-      win.recaptchaVerifier = new RecaptchaVerifier(
+  try {
+    (window as any).recaptchaVerifier = new RecaptchaVerifier(
         auth  ,
         recaptchaRef.current,         // container DOM element
         { size: "invisible" }     // config
                          // Auth instance
       );
-
-      // Must render once for invisible mode to work
-      win.recaptchaVerifier.render();
-    } catch (err) {
-      console.error("Recaptcha init error:", err);
-    }
+  } catch (err) {
+    console.log("recaptcha init error:", err);
   }
 }, []);
+
 
 
   useEffect(() => {
