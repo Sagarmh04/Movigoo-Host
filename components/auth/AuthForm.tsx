@@ -74,23 +74,21 @@ export default function AuthForm({ onAuthenticated }: Props) {
   const recaptchaRef = useRef<HTMLDivElement | null>(null);
 
   // === 100% stable Recaptcha initialization ===
-  useEffect(() => {
-    const win: any = window;
-    if (!recaptchaRef.current) return;
+// AuthForm.tsx
 
-    try {
-      if (!win.recaptchaVerifier) {
-        win.recaptchaVerifier = new RecaptchaVerifier(
-          auth,
-          recaptchaRef.current,
-          { size: "invisible" }
-        );
-        win.recaptchaVerifier.render();
-      }
-    } catch (err) {
-      console.error("Recaptcha create error:", err);
+// AuthForm.tsx
+
+useEffect(() => {
+  const win: any = window;
+  
+  return () => {
+    if (mode !== "phone" && win.recaptchaVerifier) {
+      win.recaptchaVerifier.clear();
+      win.recaptchaVerifier = null;
     }
-  }, []);
+  };
+}, [mode]);
+
 
   // Timer
   useEffect(() => {
@@ -227,33 +225,63 @@ export default function AuthForm({ onAuthenticated }: Props) {
     }
   }
 
-  async function sendOtp() {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length !== 10) {
-      return toast.error("Please enter a valid 10-digit number");
+// AuthForm.tsx
+
+  async function sendOtp() {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length !== 10) {
+      return toast.error("Please enter a valid 10-digit number");
+    }
+
+    // 1. Check that the ref exists *before* doing anything
+    if (!recaptchaRef.current) {
+      toast.error("reCAPTCHA container not found. Please try again.");
+      return;
     }
 
-    const formatted = "+91" + digits;
-    setSendingOtp(true);
+    const formatted = "+91" + digits;
+    setSendingOtp(true);
 
-    try {
+    try {
+      const win: any = window;
+
+      // 2. Clear any old verifier, just in case
+      if (otpSent && win.recaptchaVerifier) {
+  win.recaptchaVerifier.clear();
+}
+
+
+      // 3. Create the verifier *now* (just-in-time)
+      const verifier = new RecaptchaVerifier(
+        auth,
+        recaptchaRef.current, // We know this exists now
+        { size: "invisible" }
+      );
+      
+      // 4. Store it on window for this session
+      win.recaptchaVerifier = verifier;
+
+      const confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
+      win.confirmationResult = confirmation;
+
+      setOtpSent(true);
+      setResendAvailableAt(Date.now() + 30000);
+      toast.success("OTP sent");
+    } catch (err: any) {
+      console.error("OTP Send Error:", err);
+      toast.error(err?.message || "Failed to send OTP");
+      
+      // 5. If sending fails, clean up the verifier
       const win: any = window;
-      const verifier = win.recaptchaVerifier;
-      if (!verifier) throw new Error("Recaptcha missing");
+      if (win.recaptchaVerifier) {
+        win.recaptchaVerifier.clear();
+        win.recaptchaVerifier = null;
+      }
 
-      const confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
-      win.confirmationResult = confirmation;
-
-      setOtpSent(true);
-      setResendAvailableAt(Date.now() + 30000);
-      toast.success("OTP sent");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to send OTP");
-    } finally {
-      setSendingOtp(false);
-    }
-  }
-
+    } finally {
+      setSendingOtp(false);
+    }
+  }
   async function resendOtp() {
     if (resendCountdown > 0) return;
     await sendOtp();
