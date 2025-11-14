@@ -73,19 +73,28 @@ export default function AuthForm({ onAuthenticated }: Props) {
 
   const recaptchaRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const win: any = window;
-    if (!recaptchaRef.current) return;
-    if (!win?.recaptchaVerifier) {
-      try {
-        win.recaptchaVerifier = new RecaptchaVerifier(
-          auth,
-          recaptchaRef.current,
-          { size: "invisible" }
-        );
-      } catch {}
+useEffect(() => {
+  const win: any = window;
+  if (!recaptchaRef.current) return;
+
+  // Prevent double initialization
+  if (!win.recaptchaVerifier) {
+    try {
+      win.recaptchaVerifier = new RecaptchaVerifier(
+        auth  ,
+        recaptchaRef.current,         // container DOM element
+        { size: "invisible" }     // config
+                         // Auth instance
+      );
+
+      // Must render once for invisible mode to work
+      win.recaptchaVerifier.render();
+    } catch (err) {
+      console.error("Recaptcha init error:", err);
     }
-  }, []);
+  }
+}, []);
+
 
   useEffect(() => {
     if (!resendAvailableAt) {
