@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Home,
   CalendarCheck,
@@ -31,6 +31,8 @@ import VerificationTab from "@/components/tabs/VerificationTab";
 
 import MobileNavbar from "@/components/dashboard/MobileNavbar";
 import LogoutButton from "@/components/auth/LogoutButton";
+import KycNotification from "@/components/dashboard/KycNotification";
+import { auth } from "@/lib/firebase";
 
 const tabs = [
   { id: "overview", label: "Overview", icon: Home, component: <DashboardOverview /> },
@@ -49,49 +51,87 @@ const tabs = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [kycStatus, setKycStatus] = useState<string>("none");
+
+  useEffect(() => {
+    loadKycStatus();
+  }, []);
+
+  const loadKycStatus = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const idToken = await user.getIdToken();
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/getKycStatus`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setKycStatus(data.kycStatus || "none");
+      }
+    } catch (error) {
+      console.error("Error loading KYC status:", error);
+    }
+  };
+
+  const openKycTab = () => {
+    setActiveTab("verification");
+  };
 
   return (
-    <div className="min-h-screen flex bg-gray-100">
-      {/* Mobile Navbar */}
-      <MobileNavbar
-        tabs={tabs}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
+    <div className="min-h-screen flex flex-col bg-gray-100">
+      {/* KYC Notification Banner */}
+      <KycNotification kycStatus={kycStatus} onOpenKyc={openKycTab} />
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 bg-white shadow-lg flex-col">
-        <div className="px-6 py-6 border-b">
-          <img src="/logo.png" className="h-10" alt="Movigoo Logo" />
-        </div>
+      <div className="flex flex-1">
+        {/* Mobile Navbar */}
+        <MobileNavbar
+          tabs={tabs}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
 
-        <nav className="flex-1 px-4 py-4 space-y-1">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition
-                ${
-                  activeTab === t.id
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-700 hover:bg-gray-200"
-                }`}
-            >
-              <t.icon size={18} />
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        {/* Desktop Sidebar */}
+        <aside className="hidden md:flex w-64 bg-white shadow-lg flex-col">
+          <div className="px-6 py-6 border-b">
+            <img src="/logo.png" className="h-10" alt="Movigoo Logo" />
+          </div>
 
-        <div className="px-4 py-4 border-t">
-          <LogoutButton />
-        </div>
-      </aside>
+          <nav className="flex-1 px-4 py-4 space-y-1">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition
+                  ${
+                    activeTab === t.id
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-700 hover:bg-gray-200"
+                  }`}
+              >
+                <t.icon size={18} />
+                {t.label}
+              </button>
+            ))}
+          </nav>
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 pt-20 md:pt-6 overflow-y-auto">
-        {tabs.find((t) => t.id === activeTab)?.component}
-      </main>
+          <div className="px-4 py-4 border-t">
+            <LogoutButton />
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-6 pt-20 md:pt-6 overflow-y-auto">
+          {tabs.find((t) => t.id === activeTab)?.component}
+        </main>
+      </div>
     </div>
   );
 }
