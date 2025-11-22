@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 interface TabItem {
   id: string;
@@ -25,12 +26,14 @@ export default function MobileNavbar({
       <div className="flex justify-between items-center px-4 py-3">
         <img src="/logo.png" alt="Movigoo Logo" className="h-8" />
 
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-2 rounded-md hover:bg-gray-100"
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOpen(!open)}
+            className="p-2 rounded-md hover:bg-gray-100"
+          >
+            {open ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </div>
 
       {/* Dropdown */}
@@ -52,6 +55,10 @@ export default function MobileNavbar({
               {t.label}
             </button>
           ))}
+
+          <div className="px-4 py-3 border-t">
+            <LogoutButton />
+          </div>
         </div>
       )}
     </div>

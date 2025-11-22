@@ -136,18 +136,33 @@ useEffect(() => {
     return null;
   }
 
-  async function postRegisterHost(idToken: string, name: string | null, phoneVal: string | null) {
-    const res = await fetch("/api/register-host", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken, name, phone: phoneVal }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`register-host failed (${res.status}): ${text}`);
+async function postRegisterHost(idToken: string, name: string | null, phoneVal: string | null) {
+  const res = await fetch("/api/register-host", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken, name, phone: phoneVal }),
+  });
+
+  // If backend says "NOT_A_HOST_ACCOUNT"
+  if (res.status === 403) {
+    const data = await res.json().catch(() => null);
+
+    if (data?.error === "NOT_A_HOST_ACCOUNT") {
+      throw new Error("NOT_A_HOST_ACCOUNT");
     }
-    return res.json();
+
+    throw new Error("FORBIDDEN");
   }
+
+  // normal failure
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`register-host failed (${res.status}): ${text}`);
+  }
+
+  return res.json();
+}
+
 
   async function postLogin(idToken: string) {
     const res = await fetch("/api/login", {
@@ -184,9 +199,18 @@ useEffect(() => {
 
       const token = await cred.user.getIdToken();
 
-      try {
-        await postRegisterHost(token, email.split("@")[0], null);
-      } catch (err) {}
+try {
+  await postRegisterHost(token, email.split("@")[0], null);
+} catch (err: any) {
+  if (err.message === "NOT_A_HOST_ACCOUNT") {
+    toast.error(
+      "You already have a customer account. Please use your business email to create a host account."
+    );
+    setLoadingEmail(false);
+    return;
+  }
+}
+
 
       await postLogin(token);
 
@@ -207,13 +231,22 @@ useEffect(() => {
       const cred = await signInWithPopup(auth, provider);
       const token = await cred.user.getIdToken();
 
-      try {
-        await postRegisterHost(
-          token,
-          cred.user.displayName || cred.user.email?.split("@")[0] || null,
-          null
-        );
-      } catch (err) {}
+try {
+  await postRegisterHost(
+    token,
+    cred.user.displayName || cred.user.email?.split("@")[0] || null,
+    null
+  );
+} catch (err: any) {
+  if (err.message === "NOT_A_HOST_ACCOUNT") {
+    toast.error(
+      "You already have a customer account. Please use your business Google account to register as a host."
+    );
+    setLoadingGoogle(false);
+    return;
+  }
+}
+
 
       await postLogin(token);
       toast.success("Signed in with Google");
@@ -299,9 +332,22 @@ useEffect(() => {
       const cred = await confirmation.confirm(otp);
       const token = await cred.user.getIdToken();
 
-      try {
-        await postRegisterHost(token, cred.user.displayName || "PhoneUser", "+91" + phone);
-      } catch {}
+try {
+  await postRegisterHost(
+    token,
+    cred.user.displayName || "PhoneUser",
+    "+91" + phone
+  );
+} catch (err: any) {
+  if (err.message === "NOT_A_HOST_ACCOUNT") {
+    toast.error(
+      "You already have a customer account. Please use your business phone number to create a host account."
+    );
+    setVerifyingOtp(false);
+    return;
+  }
+}
+
 
       await postLogin(token);
       toast.success("Phone sign-in success");

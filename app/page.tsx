@@ -30,6 +30,7 @@ import SettingsTab from "@/components/tabs/SettingsTab";
 import VerificationTab from "@/components/tabs/VerificationTab";
 
 import MobileNavbar from "@/components/dashboard/MobileNavbar";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 const tabs = [
   { id: "overview", label: "Overview", icon: Home, component: <DashboardOverview /> },
@@ -81,6 +82,10 @@ export default function DashboardPage() {
             </button>
           ))}
         </nav>
+
+        <div className="px-4 py-4 border-t">
+          <LogoutButton />
+        </div>
       </aside>
 
       {/* Main Content */}
