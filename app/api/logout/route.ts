@@ -1,4 +1,5 @@
 // /host/app/api/logout/route.ts
+import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { serializeCookie } from "@/lib/cookies";
 
@@ -27,59 +28,46 @@ function buildSetCookieHeaders(...cookies: string[]) {
   return headers;
 }
 
-export async function POST() {
-  const store = cookies();
-
+export async function POST(req: NextRequest) {
+  const store = await cookies();
   const sessionId = store.get(COOKIE_NAME_ID)?.value || null;
-  const sessionKey = store.get(COOKIE_NAME_KEY)?.value || null;
+
+  // Extract idToken from client request body
+  const body = await req.json().catch(() => ({}));
+  const { idToken } = body;
 
   const clearId = serializeCookie(COOKIE_NAME_ID, "", cookieOptionsForClear());
   const clearKey = serializeCookie(COOKIE_NAME_KEY, "", cookieOptionsForClear());
+  const headers = buildSetCookieHeaders(clearId, clearKey);
 
-  if (!sessionId || !sessionKey) {
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
+  // If missing critical info, just clear cookies and return
+  if (!sessionId || !idToken) {
+    console.log("Logout: Missing sessionId or idToken, clearing cookies only.");
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers });
   }
 
   try {
-    console.log("LogoutCloud → Sending:", {
-      url: CF_LOGOUT,
-      sessionId,
-      sessionKey,
-    });
+    console.log("LogoutCloud → Sending cleanup request");
 
     const logoutRes = await fetch(CF_LOGOUT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-session-id": sessionId,
-        "x-session-key": sessionKey,
       },
-      body: JSON.stringify({ sessionId }),
+      body: JSON.stringify({ sessionId, idToken }),
     });
-
-    // 🔥 ALWAYS READ BODY BEFORE CHECKING OK
-    const rawText = await logoutRes.text();
-    console.log("LogoutCloud ← Response:", rawText);
 
     if (!logoutRes.ok) {
-      return new Response(JSON.stringify({ error: "LOGOUT_FAILED" }), {
-        status: logoutRes.status,
-        headers: buildSetCookieHeaders(clearId, clearKey),
-      });
+      const errText = await logoutRes.text();
+      console.warn("LogoutCloud warning:", errText);
     }
-
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
   } catch (err) {
-    console.error("API /api/logout fatal error:", err);
-    return new Response(JSON.stringify({ error: "INTERNAL_ERROR" }), {
-      status: 500,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
+    console.error("LogoutCloud fetch error:", err);
   }
+
+  // Always return success with cleared cookies
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers,
+  });
 }

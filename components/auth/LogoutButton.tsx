@@ -14,9 +14,32 @@ export default function LogoutButton({ className }: { className?: string }) {
   async function doLogout(url: string) {
     try {
       setLoading(true);
+
+      // Get fresh Firebase ID token
+      const user = auth.currentUser;
+      if (!user) {
+        console.warn("No user logged in");
+        router.push("/login");
+        return;
+      }
+
+      let idToken: string;
+      try {
+        // Force refresh to ensure token is not expired
+        idToken = await user.getIdToken(true);
+      } catch (err) {
+        console.error("Failed to get ID token:", err);
+        alert("Failed to get authentication token. Please try again.");
+        return;
+      }
+
       const res = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idToken }),
       });
 
       const text = await res.text().catch(() => "");

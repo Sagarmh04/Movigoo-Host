@@ -1,4 +1,5 @@
 // /host/app/api/logout-all/route.ts
+import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { serializeCookie } from "@/lib/cookies";
 
@@ -10,12 +11,11 @@ const COOKIE_NAME_ID = "host_session_id";
 const COOKIE_NAME_KEY = "host_session_key";
 
 function cookieOptionsForClear() {
-  const isProd = process.env.NODE_ENV === "production";
   const domain = process.env.HOST_COOKIE_DOMAIN || undefined;
   return {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax" as const,
+    secure: true,
+    sameSite: "none" as const,
     path: "/",
     domain,
     maxAge: 0,
@@ -28,58 +28,45 @@ function buildSetCookieHeaders(...cookies: string[]) {
   return headers;
 }
 
-export async function POST() {
-  const store = cookies();
+export async function POST(req: NextRequest) {
+  const store = await cookies();
 
-  const sessionId = store.get(COOKIE_NAME_ID)?.value || null;
-  const sessionKey = store.get(COOKIE_NAME_KEY)?.value || null;
+  // Extract idToken from client request body
+  const body = await req.json().catch(() => ({}));
+  const { idToken } = body;
 
-  const clearId = serializeCookie(
-    COOKIE_NAME_ID,
-    "",
-    cookieOptionsForClear()
-  );
-  const clearKey = serializeCookie(
-    COOKIE_NAME_KEY,
-    "",
-    cookieOptionsForClear()
-  );
+  const clearId = serializeCookie(COOKIE_NAME_ID, "", cookieOptionsForClear());
+  const clearKey = serializeCookie(COOKIE_NAME_KEY, "", cookieOptionsForClear());
+  const headers = buildSetCookieHeaders(clearId, clearKey);
 
-  // If no active session exists, just clear cookies and exit
-  if (!sessionId || !sessionKey) {
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
+  // If missing idToken, just clear cookies and return
+  if (!idToken) {
+    console.log("Logout all: Missing idToken, clearing cookies only.");
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers });
   }
 
   try {
+    console.log("LogoutAllCloud → Sending cleanup request");
+
     const logoutAllRes = await fetch(CF_LOGOUT_ALL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-session-id": sessionId,
-        "x-session-key": sessionKey,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ idToken }),
     });
 
     if (!logoutAllRes.ok) {
-      return new Response(JSON.stringify({ error: "LOGOUT_ALL_FAILED" }), {
-        status: logoutAllRes.status,
-        headers: buildSetCookieHeaders(clearId, clearKey),
-      });
+      const errText = await logoutAllRes.text();
+      console.warn("LogoutAllCloud warning:", errText);
     }
-
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
   } catch (err) {
-    console.error("API /api/logout-all error:", err);
-    return new Response(JSON.stringify({ error: "INTERNAL_ERROR" }), {
-      status: 500,
-      headers: buildSetCookieHeaders(clearId, clearKey),
-    });
+    console.error("LogoutAllCloud fetch error:", err);
   }
+
+  // Always return success with cleared cookies
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers,
+  });
 }
