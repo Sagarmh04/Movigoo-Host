@@ -4,6 +4,10 @@ import type { NextRequest } from "next/server";
 const COOKIE_NAME_ID = "host_session_id";
 const COOKIE_NAME_KEY = "host_session_key";
 
+const VERIFY_SESSION_URL =
+  process.env.FIREBASE_CF_VERIFY_SESSION_URL ||
+  "https://verifysession-nmi75xl45a-el.a.run.app";
+
 // Publicly accessible routes
 const PUBLIC_PATHS = [
   "/login",
@@ -14,7 +18,7 @@ const PUBLIC_PATHS = [
   "/robots.txt",
 ];
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Allow public paths
@@ -25,14 +29,38 @@ export function middleware(req: NextRequest) {
   const sessionId = req.cookies.get(COOKIE_NAME_ID)?.value;
   const sessionKey = req.cookies.get(COOKIE_NAME_KEY)?.value;
 
-  // If cookie missing → redirect to login
+  // If cookies missing → redirect to login immediately
   if (!sessionId || !sessionKey) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Authenticated → allow routing to the page
-  return NextResponse.next();
+  // Verify session with cloud function
+  try {
+    const verifyRes = await fetch(VERIFY_SESSION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-session-id": sessionId,
+        "x-session-key": sessionKey,
+      },
+    });
+
+    if (!verifyRes.ok) {
+      // Session invalid → redirect to login
+      console.warn("Session verification failed:", verifyRes.status);
+      const loginUrl = new URL("/login", req.url);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // Session valid → allow access
+    return NextResponse.next();
+  } catch (err) {
+    // Network error or cloud function unavailable → redirect to login
+    console.error("Session verification error:", err);
+    const loginUrl = new URL("/login", req.url);
+    return NextResponse.redirect(loginUrl);
+  }
 }
 
 // Match ALL routes except API routes (handled above in PUBLIC_PATHS)
