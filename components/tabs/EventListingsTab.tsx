@@ -1,10 +1,10 @@
 "use client";
 
-export default function ListingsTab() {
+export default function EventListingsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">Listings</h1>
+        <h1 className="text-3xl font-semibold text-gray-900">Event Listings</h1>
         <p className="text-gray-500 mt-1">
           Manage all your Movigoo events, spaces, or listings.
         </p>
