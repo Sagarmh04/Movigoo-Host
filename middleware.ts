@@ -41,14 +41,17 @@ export async function middleware(req: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-session-id": sessionId,
-        "x-session-key": sessionKey,
       },
+      body: JSON.stringify({
+        sessionId,
+        sessionKey,
+      }),
     });
 
     if (!verifyRes.ok) {
       // Session invalid → redirect to login
-      console.warn("Session verification failed:", verifyRes.status);
+      const errorText = await verifyRes.text().catch(() => "unknown error");
+      console.warn("Session verification failed:", verifyRes.status, errorText);
       const loginUrl = new URL("/login", req.url);
       return NextResponse.redirect(loginUrl);
     }
