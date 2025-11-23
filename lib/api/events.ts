@@ -1,5 +1,8 @@
 // Backend API integration helpers for event creation
 import { EventFormData, VenueTicketConfig, CreateEventResponse, KycStatus } from "../types/event";
+// Import Firebase Auth to get the token directly
+import { getAuth } from "firebase/auth";
+import { firebaseApp } from "../firebase";
 
 // Cloud Function URLs from environment
 const UPSERT_EVENT_URL = process.env.NEXT_PUBLIC_UPSERT_EVENT_URL || "";
@@ -7,24 +10,47 @@ const GET_KYC_STATUS_URL = process.env.NEXT_PUBLIC_GET_KYC_STATUS_URL || "";
 const GET_EVENT_URL = process.env.NEXT_PUBLIC_GET_EVENT_URL || "";
 
 /**
- * Helper to get authentication headers from cookies
+ * Helper to get authentication headers
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
+  // 1. ATTEMPT TO GET FIREBASE ID TOKEN (Most Secure/Reliable)
+  let idToken = "";
+  try {
+    const auth = getAuth(firebaseApp);
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      idToken = await currentUser.getIdToken();
+    }
+  } catch (e) {
+    console.warn("Error getting ID token:", e);
+  }
+
+  // 2. GET COOKIES (Fallback/SUPPLEMENTARY)
+  // Use the cookie names set by the middleware
   const sessionId = document.cookie
     .split("; ")
-    .find((row) => row.startsWith("sessionId="))
+    .find((row) => row.startsWith("host_session_id="))
     ?.split("=")[1];
   
   const sessionKey = document.cookie
     .split("; ")
-    .find((row) => row.startsWith("sessionKey="))
+    .find((row) => row.startsWith("host_session_key="))
     ?.split("=")[1];
 
-  return {
+  console.log("🔵 Headers prepared", { 
+    hasToken: !!idToken,
+    hasSessionId: !!sessionId, 
+    hasSessionKey: !!sessionKey 
+  });
+
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     "x-session-id": sessionId || "",
     "x-session-key": sessionKey || "",
   };
+
+  return headers;
 }
 
 /**
