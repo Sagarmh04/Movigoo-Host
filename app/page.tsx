@@ -18,7 +18,7 @@ import {
 
 import DashboardOverview from "@/components/tabs/DashboardOverview";
 import BookingsTab from "@/components/tabs/BookingsTab";
-import ListingsTab from "@/components/tabs/ListingsTab";
+import EventListingsTab from "@/components/tabs/EventListingsTab";
 import CustomersTab from "@/components/tabs/CustomersTab";
 import PaymentsTab from "@/components/tabs/PaymentsTab";
 import ReviewsTab from "@/components/tabs/ReviewsTab";
@@ -37,7 +37,7 @@ import { auth } from "@/lib/firebase";
 const tabs = [
   { id: "overview", label: "Overview", icon: Home, component: <DashboardOverview /> },
   { id: "bookings", label: "Bookings", icon: CalendarCheck, component: <BookingsTab /> },
-  { id: "listings", label: "Listings", icon: Building2, component: <ListingsTab /> },
+  { id: "listings", label: "Event Listings", icon: Building2, component: <EventListingsTab /> },
   { id: "customers", label: "Customers", icon: Users, component: <CustomersTab /> },
   { id: "payments", label: "Payments", icon: IndianRupee, component: <PaymentsTab /> },
   { id: "reviews", label: "Reviews", icon: Star, component: <ReviewsTab /> },
