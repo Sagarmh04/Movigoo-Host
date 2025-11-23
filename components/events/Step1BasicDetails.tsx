@@ -10,6 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventFormData, ValidationError } from "@/lib/types/event";
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { firebaseApp } from "@/lib/firebase";
 
 interface Step1BasicDetailsProps {
   data: Partial<EventFormData>;
@@ -81,28 +83,40 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
   };
 
   const handleFileUpload = async (file: File, type: "wide" | "portrait") => {
-    // TODO: Integrate with backend storage (Firebase Storage, etc.)
-    // For now, create a local preview URL
     const setUploading = type === "wide" ? setUploadingWide : setUploadingPortrait;
-    
     setUploading(true);
-    
-    // Simulate upload delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    // Create preview URL
-    const previewUrl = URL.createObjectURL(file);
-    
-    if (type === "wide") {
-      onChange({ ...data, coverPhotoWide: previewUrl });
-    } else {
-      onChange({ ...data, coverPhotoPortrait: previewUrl });
+
+    try {
+      const storage = getStorage(firebaseApp);
+      const path = `events/covers/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+      const ref = storageRef(storage, path);
+
+      const uploadTask = uploadBytesResumable(ref, file);
+
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          "state_changed",
+          () => {},
+          (error) => reject(error),
+          () => resolve()
+        );
+      });
+
+      const downloadURL = await getDownloadURL(ref);
+
+      if (type === "wide") {
+        onChange({ ...data, coverPhotoWide: downloadURL });
+      } else {
+        onChange({ ...data, coverPhotoPortrait: downloadURL });
+      }
+
+      console.log(`[UPLOAD] ${type} uploaded:`, downloadURL);
+    } catch (err) {
+      console.error("Error uploading file:", err);
+      // Optionally show a toast to the user here
+    } finally {
+      setUploading(false);
     }
-    
-    setUploading(false);
-    
-    // TODO: Show toast notification
-    console.log(`[PLACEHOLDER] ${type} photo uploaded:`, file.name);
   };
 
   const handleRemovePhoto = (type: "wide" | "portrait") => {
