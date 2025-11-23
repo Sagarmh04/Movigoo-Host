@@ -27,6 +27,7 @@ import {
   scrollToFirstError,
 } from "@/lib/validation/eventValidation";
 import { toast } from "sonner";
+import { saveEventDraft, hostEvent, fetchEvent, fetchTicketConfigs } from "@/lib/api/events";
 
 interface EventCreationWizardProps {
   eventId?: string; // For editing existing events
@@ -87,12 +88,29 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  // TODO: Load existing event data if editing
+  // Load existing event data if editing
   useEffect(() => {
     if (eventId) {
-      // PLACEHOLDER: Load event from backend
-      console.log("[PLACEHOLDER] Loading event:", eventId);
-      // fetchEvent(eventId).then(setFormData);
+      const loadEvent = async () => {
+        try {
+          const eventData = await fetchEvent(eventId);
+          const ticketData = await fetchTicketConfigs(eventId);
+          
+          if (eventData) {
+            setFormData(eventData);
+            setHasUnsavedChanges(false);
+          }
+          
+          if (ticketData.length > 0) {
+            setTicketConfigs(ticketData);
+          }
+        } catch (error) {
+          console.error("Error loading event:", error);
+          toast.error("Failed to load event data");
+        }
+      };
+      
+      loadEvent();
     }
   }, [eventId]);
 
@@ -118,14 +136,9 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
         return;
       }
 
-      // TODO: Call backend API to save draft
-      console.log("[PLACEHOLDER] Saving draft...", { formData, ticketConfigs });
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // PLACEHOLDER: Success response
-      const savedEventId = eventId || "new-event-id-123";
+      // Call backend API to save draft
+      const result = await saveEventDraft(formData, ticketConfigs, eventId);
+      const savedEventId = result.eventId;
 
       setFormData({
         ...formData,
@@ -205,20 +218,12 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
         return;
       }
 
-      // TODO: Call backend API to host event
-      console.log("[PLACEHOLDER] Hosting event...", { formData, ticketConfigs, kycStatus });
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // PLACEHOLDER: Simulate different backend responses
-
-      // Scenario 1: KYC not verified
-      if (kycStatus !== "verified") {
-        console.log("[PLACEHOLDER] KYC not verified - saving as draft");
+      // Call backend API to host event
+      const result = await hostEvent(formData, ticketConfigs, eventId);
+      
+      // Handle KYC not verified
+      if (result.status === "kyc_required") {
         setShowKycDialog(true);
-        
-        // Save as draft in this case
         setFormData({
           ...formData,
           status: "draft",
@@ -227,29 +232,27 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
         setHasUnsavedChanges(false);
         return;
       }
-
-      // Scenario 2: Backend validation errors
-      // const backendErrors: ValidationError[] = [
-      //   { field: "title", message: "Title already exists", step: 1 }
-      // ];
-      // if (backendErrors.length > 0) {
-      //   setErrors(backendErrors);
-      //   const firstErrorStep = backendErrors[0].step || 1;
-      //   setCurrentStep(firstErrorStep);
-      //   scrollToFirstError(backendErrors);
-      //   toast.error("Backend validation failed");
-      //   return;
-      // }
-
-      // Scenario 3: Success
-      console.log("[PLACEHOLDER] Event hosted successfully!");
-      setFormData({
-        ...formData,
-        status: "hosted",
-        lastSaved: new Date(),
-      });
-      setHasUnsavedChanges(false);
-      setShowSuccessDialog(true);
+      
+      // Handle validation errors
+      if (!result.success && result.errors && result.errors.length > 0) {
+        setErrors(result.errors);
+        const firstErrorStep = result.errors[0].step || 1;
+        setCurrentStep(firstErrorStep);
+        scrollToFirstError(result.errors);
+        toast.error("Please fix validation errors before hosting");
+        return;
+      }
+      
+      // Success!
+      if (result.success) {
+        setFormData({
+          ...formData,
+          status: "hosted",
+          lastSaved: new Date(),
+        });
+        setHasUnsavedChanges(false);
+        setShowSuccessDialog(true);
+      }
 
     } catch (error) {
       console.error("[PLACEHOLDER] Error hosting event:", error);

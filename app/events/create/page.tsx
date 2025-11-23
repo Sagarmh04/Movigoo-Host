@@ -3,29 +3,19 @@
 import { useState, useEffect } from "react";
 import EventCreationWizard from "@/components/events/EventCreationWizard";
 import { KycStatus } from "@/lib/types/event";
+import { getKycStatus } from "@/lib/api/events";
 
 export default function CreateEventPage() {
   const [kycStatus, setKycStatus] = useState<KycStatus>("not_started");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch KYC status from backend
     const fetchKycStatus = async () => {
       try {
-        console.log("[PLACEHOLDER] Fetching KYC status...");
-        
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
-        // PLACEHOLDER: Mock KYC status - replace with actual API call
-        // const response = await fetch("/api/host/getKycStatus");
-        // const data = await response.json();
-        // setKycStatus(data.status);
-        
-        // For demo: set to "verified" - change this to test different statuses
-        setKycStatus("verified");
+        const status = await getKycStatus();
+        setKycStatus(status);
       } catch (error) {
-        console.error("[PLACEHOLDER] Error fetching KYC status:", error);
+        console.error("Error fetching KYC status:", error);
         setKycStatus("not_started");
       } finally {
         setLoading(false);
