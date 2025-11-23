@@ -264,7 +264,7 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
               onCheckedChange={(checked) => onChange({ ...data, termsAccepted: checked as boolean })}
             />
             <Label htmlFor="termsAccepted" className="text-sm font-normal cursor-pointer">
-              I confirm that this event follows Movigoo's policies and terms of service *
+              I confirm that this event follows Movigoo policies and terms of service *
             </Label>
           </div>
           {getError("termsAccepted") && <p className="text-sm text-red-500">{getError("termsAccepted")}</p>}

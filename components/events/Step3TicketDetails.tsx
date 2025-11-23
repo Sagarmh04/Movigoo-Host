@@ -64,7 +64,6 @@ export default function Step3TicketDetails({
       config.venueId === venueId ? { ...config, ticketTypes } : config
     );
 
-    // If config doesn't exist, add it
     if (!ticketConfigs.find((tc) => tc.venueId === venueId)) {
       updatedConfigs.push({ venueId, ticketTypes });
     }
