@@ -247,10 +247,14 @@ function getStepFromField(field: string): number {
 export async function getKycStatus(): Promise<KycStatus> {
   try {
     const headers = await getAuthHeaders();
-    
+    // Get the token explicitly to put in the body (backend expects it)
+    const auth = getAuth(firebaseApp);
+    const idToken = await auth.currentUser?.getIdToken();
+
     const response = await fetch(GET_KYC_STATUS_URL, {
       method: "POST",
       headers,
+      body: JSON.stringify({ idToken: idToken || "" }),
     });
 
     if (!response.ok) {
@@ -348,36 +352,3 @@ export async function fetchTicketConfigs(eventId: string): Promise<VenueTicketCo
     return [];
   }
 }
-
-// ============================================================================
-// USAGE INSTRUCTIONS
-// ============================================================================
-//
-// After deployment, update the UPSERT_EVENT_URL constant above with your
-// actual Cloud Function URL.
-//
-// The URL will be something like:
-// https://asia-south1-<your-project-id>.cloudfunctions.net/upsertEvent
-//
-// You can set it as an environment variable:
-// NEXT_PUBLIC_UPSERT_EVENT_URL=https://...
-//
-// ============================================================================
-// INTEGRATION IN EventCreationWizard.tsx
-// ============================================================================
-//
-// 1. Import the functions:
-//    import { saveEventDraft, hostEvent } from "@/lib/api/events";
-//
-// 2. In handleSaveAsDraft, replace the placeholder:
-//    const result = await saveEventDraft(formData, ticketConfigs, eventId);
-//    setFormData({ ...formData, status: "draft", lastSaved: result.lastSaved });
-//    if (!eventId) router.push(`/events/${result.eventId}/edit`);
-//
-// 3. In handleHostEvent, replace the placeholder:
-//    const result = await hostEvent(formData, ticketConfigs, eventId);
-//    if (result.status === "kyc_required") { setShowKycDialog(true); return; }
-//    if (!result.success && result.errors) { setErrors(result.errors); return; }
-//    setShowSuccessDialog(true);
-//
-// ============================================================================
