@@ -1,20 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Calendar, MapPin, Users } from "lucide-react";
+import { Plus, Calendar, MapPin, Users, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { fetchEvents } from "@/lib/api/events";
+import { EventSummary } from "@/lib/types/event";
 
 export default function EventListingsTab() {
   const router = useRouter();
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // TODO: Fetch actual events from backend
-  const events: any[] = []; // PLACEHOLDER: Replace with actual data
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const data = await fetchEvents();
+        setEvents(data);
+      } catch (error) {
+        console.error("Failed to load events", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadEvents();
+  }, []);
 
   const handleCreateEvent = () => {
     router.push("/events/create");
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -68,7 +92,7 @@ export default function EventListingsTab() {
                 </div>
                 <div className="flex items-start justify-between">
                   <CardTitle className="line-clamp-2">{event.title}</CardTitle>
-                  <Badge variant={event.status === "hosted" ? "default" : "secondary"}>
+                  <Badge variant={event.status === "hosted" || event.status === "published" ? "default" : "secondary"}>
                     {event.status}
                   </Badge>
                 </div>

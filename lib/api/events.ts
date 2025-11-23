@@ -1,5 +1,5 @@
 // Backend API integration helpers for event creation
-import { EventFormData, VenueTicketConfig, CreateEventResponse, KycStatus } from "../types/event";
+import { EventFormData, VenueTicketConfig, CreateEventResponse, KycStatus, EventSummary } from "../types/event";
 // Import Firebase Auth to get the token directly
 import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
@@ -8,6 +8,7 @@ import { firebaseApp } from "../firebase";
 const UPSERT_EVENT_URL = process.env.NEXT_PUBLIC_UPSERT_EVENT_URL || "";
 const GET_KYC_STATUS_URL = process.env.NEXT_PUBLIC_GET_KYC_STATUS_URL || "";
 const GET_EVENT_URL = process.env.NEXT_PUBLIC_GET_EVENT_URL || "";
+const LIST_EVENTS_URL = process.env.NEXT_PUBLIC_LIST_EVENTS_URL || "";
 
 /**
  * Helper to get authentication headers
@@ -349,6 +350,41 @@ export async function fetchTicketConfigs(eventId: string): Promise<VenueTicketCo
     return data.event.tickets.venueConfigs || [];
   } catch (error) {
     console.error("Error fetching ticket configs:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch all events for the current host
+ */
+export async function fetchEvents(): Promise<EventSummary[]> {
+  try {
+    const headers = await getAuthHeaders();
+    
+    if (!LIST_EVENTS_URL) {
+      console.error("LIST_EVENTS_URL is not defined!");
+      return [];
+    }
+
+    const response = await fetch(LIST_EVENTS_URL, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch events:", response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    
+    if (!data.success || !data.events) {
+      return [];
+    }
+
+    return data.events;
+  } catch (error) {
+    console.error("Error fetching events:", error);
     return [];
   }
 }

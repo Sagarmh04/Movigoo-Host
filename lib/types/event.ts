@@ -78,3 +78,16 @@ export interface CreateEventResponse {
 
 // KYC status for event creation context
 export type KycStatus = "verified" | "pending" | "not_started" | "rejected";
+
+export interface EventSummary {
+  id: string;
+  eventId: string;
+  status: "draft" | "published" | "hosted";
+  title: string;
+  description: string;
+  coverPhotoWide: string;
+  locations: EventLocation[];
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
