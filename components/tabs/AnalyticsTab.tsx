@@ -14,7 +14,7 @@ export default function AnalyticsTab() {
       <div className="bg-white p-6 rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-4">Traffic Overview</h2>
         <p className="text-gray-500">
-          Traffic chart placeholder.
+          Traffic chart placeholder..
         </p>
       </div>
 
