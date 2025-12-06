@@ -9,7 +9,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
+  FormMessage
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -283,12 +283,12 @@ export default function Step1BasicDetails({ form }: Step1BasicDetailsProps) {
             name="duration"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Duration *</FormLabel>
+                <FormLabel>Duration </FormLabel>
                 <FormControl>
                   <Input placeholder="e.g., 2 hours, 1 day" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Enter the duration of the event (e.g., "2 hours", "1 day")
+                  Enter the duration of the event (e.g., 2 hours, 1 day)
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -301,7 +301,7 @@ export default function Step1BasicDetails({ form }: Step1BasicDetailsProps) {
             name="terms"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Terms & Conditions *</FormLabel>
+                <FormLabel>Terms & Conditions </FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder="Enter terms and conditions for the event"
