@@ -197,7 +197,7 @@ export default function VerificationTab() {
 
       const idToken = await user.getIdToken();
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/submitKyc`,
+      "https://submitkyc-nmi75xl45a-el.a.run.app",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
