@@ -52,7 +52,7 @@ export interface Volunteer {
 export type VolunteerPrivilege = "ticket_checking" | "stats_view";
 
 /**
- * Create a new volunteer
+ * Create a new volunteer with password hashing
  */
 export async function createVolunteer(
   username: string,
@@ -64,6 +64,31 @@ export async function createVolunteer(
     throw new Error("User not authenticated");
   }
 
+  // Validate input
+  if (!username || username.trim().length === 0) {
+    throw new Error("Username is required");
+  }
+  if (!password || password.length < 6) {
+    throw new Error("Password must be at least 6 characters long");
+  }
+  if (!privileges || privileges.length === 0) {
+    throw new Error("At least one privilege is required");
+  }
+
+  // Hash password server-side via API route
+  const hashResponse = await fetch("/api/volunteers/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+
+  if (!hashResponse.ok) {
+    const error = await hashResponse.json().catch(() => ({}));
+    throw new Error(error.message || "Failed to hash password");
+  }
+
+  const { hashedPassword } = await hashResponse.json();
+
   // Get host user ID
   const hostUserId = user.uid;
   
@@ -73,12 +98,12 @@ export async function createVolunteer(
   // Create access link
   const accessLink = `crew.movigoo.in/${uuid}`;
   
-  // Create volunteer document
+  // Create volunteer document with hashed password
   const volunteer: Volunteer = {
     id: uuid,
     hostUserId,
-    username,
-    password, // Note: In production, hash this password before saving
+    username: username.trim(),
+    password: hashedPassword, // Hashed password from server
     privileges,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -130,10 +155,11 @@ export async function getVolunteerByUuid(uuid: string): Promise<Volunteer | null
 
 /**
  * Update volunteer
+ * Note: If updating password, use updateVolunteerPassword instead
  */
 export async function updateVolunteer(
   uuid: string,
-  updates: Partial<Volunteer>
+  updates: Partial<Omit<Volunteer, "password">>
 ): Promise<void> {
   const volunteerRef = doc(db, "volunteers", uuid);
   
@@ -141,6 +167,43 @@ export async function updateVolunteer(
     volunteerRef,
     {
       ...updates,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Update volunteer password (hashes password server-side)
+ */
+export async function updateVolunteerPassword(
+  uuid: string,
+  newPassword: string
+): Promise<void> {
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error("Password must be at least 6 characters long");
+  }
+
+  // Hash password server-side via API route
+  const hashResponse = await fetch("/api/volunteers/update-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: newPassword }),
+  });
+
+  if (!hashResponse.ok) {
+    const error = await hashResponse.json().catch(() => ({}));
+    throw new Error(error.message || "Failed to hash password");
+  }
+
+  const { hashedPassword } = await hashResponse.json();
+
+  // Update password in Firestore
+  const volunteerRef = doc(db, "volunteers", uuid);
+  await setDoc(
+    volunteerRef,
+    {
+      password: hashedPassword,
       updatedAt: new Date().toISOString(),
     },
     { merge: true }

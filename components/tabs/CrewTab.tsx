@@ -1,16 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Copy, Trash2, Eye, EyeOff, CheckCircle2, XCircle, Settings } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Copy, Trash2, Eye, EyeOff, CheckCircle2, XCircle, Settings, Search, Edit2, Filter, ArrowUpDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { createVolunteer, getVolunteers, deleteVolunteer, toggleVolunteerStatus, type Volunteer, type VolunteerPrivilege } from "@/lib/api/volunteers";
 import ShowAssignmentDialog from "./ShowAssignmentDialog";
+import EditVolunteerDialog from "./EditVolunteerDialog";
+
+type SortField = "username" | "createdAt" | "status" | "assignments";
+type SortDirection = "asc" | "desc";
+type StatusFilter = "all" | "active" | "inactive";
+type PrivilegeFilter = "all" | "ticket_checking" | "stats_view";
 
 export default function CrewTab() {
   const [showForm, setShowForm] = useState(false);
@@ -25,6 +32,15 @@ export default function CrewTab() {
   const [createdVolunteer, setCreatedVolunteer] = useState<Volunteer | null>(null);
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
   const [selectedVolunteerForAssignment, setSelectedVolunteerForAssignment] = useState<Volunteer | null>(null);
+  
+  // Enhanced filtering and sorting
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [privilegeFilter, setPrivilegeFilter] = useState<PrivilegeFilter>("all");
+  const [sortField, setSortField] = useState<SortField>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedVolunteerForEdit, setSelectedVolunteerForEdit] = useState<Volunteer | null>(null);
 
   useEffect(() => {
     loadVolunteers();
@@ -60,8 +76,13 @@ export default function CrewTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.username || !formData.password) {
-      toast.error("Username and password are required");
+    if (!formData.username || formData.username.trim().length === 0) {
+      toast.error("Username is required");
+      return;
+    }
+
+    if (!formData.password || formData.password.length < 6) {
+      toast.error("Password must be at least 6 characters long");
       return;
     }
 
@@ -132,6 +153,81 @@ export default function CrewTab() {
       default:
         return privilege;
     }
+  };
+
+  // Filtered and sorted volunteers
+  const filteredAndSortedVolunteers = useMemo(() => {
+    let filtered = [...volunteers];
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((v) =>
+        v.username.toLowerCase().includes(query) ||
+        v.accessLink.toLowerCase().includes(query) ||
+        v.showAssignments?.some((a) => a.eventTitle.toLowerCase().includes(query))
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((v) =>
+        statusFilter === "active" ? v.isActive : !v.isActive
+      );
+    }
+
+    // Privilege filter
+    if (privilegeFilter !== "all") {
+      filtered = filtered.filter((v) => v.privileges.includes(privilegeFilter));
+    }
+
+    // Sorting
+    filtered.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case "username":
+          comparison = a.username.localeCompare(b.username);
+          break;
+        case "createdAt":
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+        case "status":
+          comparison = (a.isActive ? 1 : 0) - (b.isActive ? 1 : 0);
+          break;
+        case "assignments":
+          comparison = (a.showAssignments?.length || 0) - (b.showAssignments?.length || 0);
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [volunteers, searchQuery, statusFilter, privilegeFilter, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const handleEdit = (volunteer: Volunteer) => {
+    setSelectedVolunteerForEdit(volunteer);
+    setShowEditDialog(true);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setPrivilegeFilter("all");
+    setSortField("createdAt");
+    setSortDirection("desc");
   };
 
   return (
@@ -307,20 +403,107 @@ export default function CrewTab() {
         </Card>
       )}
 
-      {/* Volunteers List */}
+      {/* Volunteers List with Filters */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">All Volunteers</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">
+            All Volunteers ({filteredAndSortedVolunteers.length})
+          </h2>
+        </div>
+
+        {/* Search and Filters */}
+        <Card className="mb-4">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search volunteers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <Select value={statusFilter} onValueChange={(value: StatusFilter) => setStatusFilter(value)}>
+                <SelectTrigger>
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Privilege Filter */}
+              <Select value={privilegeFilter} onValueChange={(value: PrivilegeFilter) => setPrivilegeFilter(value)}>
+                <SelectTrigger>
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by privilege" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Privileges</SelectItem>
+                  <SelectItem value="ticket_checking">Ticket Checking</SelectItem>
+                  <SelectItem value="stats_view">Stats View</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Sort */}
+              <Select
+                value={`${sortField}-${sortDirection}`}
+                onValueChange={(value) => {
+                  const [field, direction] = value.split("-") as [SortField, SortDirection];
+                  setSortField(field);
+                  setSortDirection(direction);
+                }}
+              >
+                <SelectTrigger>
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="createdAt-desc">Newest First</SelectItem>
+                  <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+                  <SelectItem value="username-asc">Username A-Z</SelectItem>
+                  <SelectItem value="username-desc">Username Z-A</SelectItem>
+                  <SelectItem value="status-desc">Active First</SelectItem>
+                  <SelectItem value="assignments-desc">Most Assignments</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Clear Filters */}
+            {(searchQuery || statusFilter !== "all" || privilegeFilter !== "all" || sortField !== "createdAt" || sortDirection !== "desc") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="mt-4"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filters
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
         {loading ? (
           <div className="text-center py-8 text-gray-500">Loading volunteers...</div>
-        ) : volunteers.length === 0 ? (
+        ) : filteredAndSortedVolunteers.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-gray-500">
-              No volunteers yet. Create your first volunteer to get started.
+              {volunteers.length === 0
+                ? "No volunteers yet. Create your first volunteer to get started."
+                : "No volunteers match your filters. Try adjusting your search criteria."}
             </CardContent>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {volunteers.map((volunteer) => (
+            {filteredAndSortedVolunteers.map((volunteer) => (
               <Card key={volunteer.id}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
@@ -407,6 +590,15 @@ export default function CrewTab() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleEdit(volunteer)}
+                        className="flex-1"
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           setSelectedVolunteerForAssignment(volunteer);
                           setShowAssignmentDialog(true);
@@ -414,7 +606,7 @@ export default function CrewTab() {
                         className="flex-1"
                       >
                         <Settings className="h-4 w-4 mr-2" />
-                        Assign Shows ({volunteer.showAssignments?.length || 0})
+                        Shows ({volunteer.showAssignments?.length || 0})
                       </Button>
                     </div>
                     <div className="flex gap-2">
@@ -457,6 +649,23 @@ export default function CrewTab() {
           volunteerId={selectedVolunteerForAssignment.id}
           existingAssignments={selectedVolunteerForAssignment.showAssignments || []}
           onAssignmentsUpdated={() => {
+            loadVolunteers();
+          }}
+        />
+      )}
+
+      {/* Edit Volunteer Dialog */}
+      {selectedVolunteerForEdit && (
+        <EditVolunteerDialog
+          open={showEditDialog}
+          onOpenChange={(open) => {
+            setShowEditDialog(open);
+            if (!open) {
+              setSelectedVolunteerForEdit(null);
+            }
+          }}
+          volunteer={selectedVolunteerForEdit}
+          onUpdated={() => {
             loadVolunteers();
           }}
         />
