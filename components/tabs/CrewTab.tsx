@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Copy, Trash2, Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Copy, Trash2, Eye, EyeOff, CheckCircle2, XCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { createVolunteer, getVolunteers, deleteVolunteer, toggleVolunteerStatus, type Volunteer, type VolunteerPrivilege } from "@/lib/api/volunteers";
+import ShowAssignmentDialog from "./ShowAssignmentDialog";
 
 export default function CrewTab() {
   const [showForm, setShowForm] = useState(false);
@@ -22,6 +23,8 @@ export default function CrewTab() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [createdVolunteer, setCreatedVolunteer] = useState<Volunteer | null>(null);
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [selectedVolunteerForAssignment, setSelectedVolunteerForAssignment] = useState<Volunteer | null>(null);
 
   useEffect(() => {
     loadVolunteers();
@@ -359,6 +362,26 @@ export default function CrewTab() {
                     </div>
                   </div>
 
+                  {volunteer.showAssignments && volunteer.showAssignments.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">
+                        Assigned Shows ({volunteer.showAssignments.length})
+                      </Label>
+                      <div className="mt-1 space-y-1">
+                        {volunteer.showAssignments.slice(0, 2).map((assignment) => (
+                          <div key={assignment.id} className="text-xs text-gray-600 truncate">
+                            {assignment.eventTitle} - {assignment.showName || "Show"}
+                          </div>
+                        ))}
+                        {volunteer.showAssignments.length > 2 && (
+                          <div className="text-xs text-gray-400">
+                            +{volunteer.showAssignments.length - 2} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <Label className="text-sm font-medium text-gray-500">
                       Access Link
@@ -379,24 +402,40 @@ export default function CrewTab() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        handleToggleStatus(volunteer.id, volunteer.isActive)
-                      }
-                      className="flex-1"
-                    >
-                      {volunteer.isActive ? "Deactivate" : "Activate"}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(volunteer.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedVolunteerForAssignment(volunteer);
+                          setShowAssignmentDialog(true);
+                        }}
+                        className="flex-1"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Assign Shows ({volunteer.showAssignments?.length || 0})
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleToggleStatus(volunteer.id, volunteer.isActive)
+                        }
+                        className="flex-1"
+                      >
+                        {volunteer.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(volunteer.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -404,6 +443,24 @@ export default function CrewTab() {
           </div>
         )}
       </div>
+
+      {/* Show Assignment Dialog */}
+      {selectedVolunteerForAssignment && (
+        <ShowAssignmentDialog
+          open={showAssignmentDialog}
+          onOpenChange={(open) => {
+            setShowAssignmentDialog(open);
+            if (!open) {
+              setSelectedVolunteerForAssignment(null);
+            }
+          }}
+          volunteerId={selectedVolunteerForAssignment.id}
+          existingAssignments={selectedVolunteerForAssignment.showAssignments || []}
+          onAssignmentsUpdated={() => {
+            loadVolunteers();
+          }}
+        />
+      )}
     </div>
   );
 }

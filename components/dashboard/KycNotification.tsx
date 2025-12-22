@@ -12,8 +12,8 @@ interface KycNotificationProps {
 export default function KycNotification({ kycStatus, onOpenKyc }: KycNotificationProps) {
   const [dismissed, setDismissed] = useState(false);
 
-  // Don't show if verified or pending
-  if (kycStatus === "verified" || kycStatus === "pending" || dismissed) {
+  // Don't show if verified (only hide when verified, not when pending)
+  if (kycStatus === "verified" || dismissed) {
     return null;
   }
 

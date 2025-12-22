@@ -66,6 +66,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isHosting, setIsHosting] = useState(false);
+  const [isLoadingEvent, setIsLoadingEvent] = useState(false);
 
   const isEditMode = !!eventId;
   const pageTitle = isEditMode ? "Edit Event" : "Create Event";
@@ -92,6 +93,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
   useEffect(() => {
     if (eventId) {
       const loadEvent = async () => {
+        setIsLoadingEvent(true);
         try {
           const eventData = await fetchEvent(eventId);
           const ticketData = await fetchTicketConfigs(eventId);
@@ -107,6 +109,8 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
         } catch (error) {
           console.error("Error loading event:", error);
           toast.error("Failed to load event data");
+        } finally {
+          setIsLoadingEvent(false);
         }
       };
       
@@ -307,6 +311,18 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
     if (diffMinutes === 1) return "Draft (autosaved 1 min ago)";
     return `Draft (autosaved ${diffMinutes} min ago)`;
   };
+
+  // Show loading state while fetching event data
+  if (isEditMode && isLoadingEvent) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading event data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

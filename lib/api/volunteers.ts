@@ -18,6 +18,24 @@ function generateUUID(): string {
   });
 }
 
+export interface ShowAssignment {
+  id: string;                          // Unique assignment ID
+  eventId: string;                     // Event ID
+  eventTitle: string;                  // Event title (for display)
+  locationId: string;                  // Location ID
+  locationName: string;                // Location name (for display)
+  venueId: string;                     // Venue ID
+  venueName: string;                   // Venue name (for display)
+  dateId: string;                      // Date ID
+  date: string;                        // Date string (ISO format)
+  showId: string;                      // Show ID
+  showName?: string;                   // Show name (optional)
+  showStartTime: string;               // Show start time (HH:mm format)
+  showEndTime: string;                 // Show end time (HH:mm format)
+  assignedAt: string;                  // When assignment was created
+  assignedBy: string;                  // Host user ID who assigned
+}
+
 export interface Volunteer {
   id: string;                          // UUID
   hostUserId: string;                  // ID of the host who created this volunteer
@@ -28,6 +46,7 @@ export interface Volunteer {
   updatedAt: string;                   // ISO date string
   isActive: boolean;                   // Whether volunteer account is active
   accessLink: string;                  // Full access link: crew.movigoo.in/{uuid}
+  showAssignments: ShowAssignment[];   // Array of show assignments
 }
 
 export type VolunteerPrivilege = "ticket_checking" | "stats_view";
@@ -65,6 +84,7 @@ export async function createVolunteer(
     updatedAt: new Date().toISOString(),
     isActive: true,
     accessLink,
+    showAssignments: [], // Initialize with empty assignments
   };
   
   // Save to Firestore
@@ -140,5 +160,67 @@ export async function deleteVolunteer(uuid: string): Promise<void> {
  */
 export async function toggleVolunteerStatus(uuid: string, isActive: boolean): Promise<void> {
   await updateVolunteer(uuid, { isActive });
+}
+
+/**
+ * Add show assignment to volunteer
+ */
+export async function addShowAssignment(
+  uuid: string,
+  assignment: Omit<ShowAssignment, "id" | "assignedAt" | "assignedBy">
+): Promise<void> {
+  const volunteer = await getVolunteerByUuid(uuid);
+  if (!volunteer) {
+    throw new Error("Volunteer not found");
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("User not authenticated");
+  }
+
+  const newAssignment: ShowAssignment = {
+    ...assignment,
+    id: generateUUID(),
+    assignedAt: new Date().toISOString(),
+    assignedBy: user.uid,
+  };
+
+  const updatedAssignments = [...volunteer.showAssignments, newAssignment];
+  await updateVolunteer(uuid, { showAssignments: updatedAssignments });
+}
+
+/**
+ * Remove show assignment from volunteer
+ */
+export async function removeShowAssignment(uuid: string, assignmentId: string): Promise<void> {
+  const volunteer = await getVolunteerByUuid(uuid);
+  if (!volunteer) {
+    throw new Error("Volunteer not found");
+  }
+
+  const updatedAssignments = volunteer.showAssignments.filter(
+    (assignment) => assignment.id !== assignmentId
+  );
+  await updateVolunteer(uuid, { showAssignments: updatedAssignments });
+}
+
+/**
+ * Update show assignment
+ */
+export async function updateShowAssignment(
+  uuid: string,
+  assignmentId: string,
+  updates: Partial<Omit<ShowAssignment, "id" | "assignedAt" | "assignedBy">>
+): Promise<void> {
+  const volunteer = await getVolunteerByUuid(uuid);
+  if (!volunteer) {
+    throw new Error("Volunteer not found");
+  }
+
+  const updatedAssignments = volunteer.showAssignments.map((assignment) =>
+    assignment.id === assignmentId ? { ...assignment, ...updates } : assignment
+  );
+  await updateVolunteer(uuid, { showAssignments: updatedAssignments });
 }
 
