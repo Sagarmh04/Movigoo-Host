@@ -14,6 +14,7 @@ import {
   LifeBuoy,
   Settings,
   ShieldCheck,
+  UserCog,
 } from "lucide-react";
 
 import DashboardOverview from "@/components/tabs/DashboardOverview";
@@ -28,6 +29,7 @@ import AnalyticsTab from "@/components/tabs/AnalyticsTab";
 import SupportTab from "@/components/tabs/SupportTab";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import VerificationTab from "@/components/tabs/VerificationTab";
+import CrewTab from "@/components/tabs/CrewTab";
 
 import MobileNavbar from "@/components/dashboard/MobileNavbar";
 import LogoutButton from "@/components/auth/LogoutButton";
@@ -44,6 +46,7 @@ const tabs = [
   { id: "messages", label: "Messages", icon: MessageSquare, component: <MessagesTab /> },
   { id: "offers", label: "Offers", icon: TicketPercent, component: <OffersTab /> },
   { id: "analytics", label: "Analytics", icon: BarChart2, component: <AnalyticsTab /> },
+  { id: "crew", label: "Crew", icon: UserCog, component: <CrewTab /> },
   { id: "support", label: "Support", icon: LifeBuoy, component: <SupportTab /> },
   { id: "settings", label: "Settings", icon: Settings, component: <SettingsTab /> },
   { id: "verification", label: "Verification", icon: ShieldCheck, component: <VerificationTab /> },
