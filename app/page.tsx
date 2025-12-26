@@ -42,11 +42,14 @@ export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
   const [kycStatus, setKycStatus] = useState<string>("none");
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+
+  // Owner email - single source of truth
+  const OWNER_EMAIL = "movigoo4@gmail.com";
 
   useEffect(() => {
     loadKycStatus();
-    checkUserRole();
+    checkOwnerAccess();
   }, []);
 
   // Refresh KYC status when switching to verification tab
@@ -80,15 +83,15 @@ export default function DashboardPage() {
     }
   };
 
-  const checkUserRole = async () => {
+  const checkOwnerAccess = async () => {
     try {
       const user = auth.currentUser;
       if (user) {
-        const idTokenResult = await user.getIdTokenResult();
-        setUserRole((idTokenResult.claims.role as string) || null);
+        const userIsOwner = user.email === OWNER_EMAIL;
+        setIsOwner(userIsOwner);
       }
     } catch (error) {
-      console.error("Error checking user role:", error);
+      console.error("Error checking owner access:", error);
     }
   };
 
@@ -144,15 +147,15 @@ export default function DashboardPage() {
           </nav>
 
           <div className="px-4 py-4 border-t">
-            {userRole === "SUPER_ADMIN" && (
+            {isOwner && (
               <>
                 <div className="mb-3 border-t border-gray-300" />
                 <button
-                  onClick={() => router.push("/super-admin/organizers")}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition mb-2"
+                  onClick={() => router.push("/owner/organizers")}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-500 hover:bg-blue-500/10 transition mb-2"
                 >
                   <Shield size={18} />
-                  Super Admin
+                  Owner Panel
                 </button>
               </>
             )}

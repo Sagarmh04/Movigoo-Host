@@ -49,8 +49,11 @@ export default function SuperAdminOrganizersPage() {
   const [loading, setLoading] = useState(true);
   const [organizers, setOrganizers] = useState<OrganizerData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Owner email - single source of truth
+  const OWNER_EMAIL = "movigoo4@gmail.com";
 
   useEffect(() => {
     checkAccess();
@@ -65,17 +68,16 @@ export default function SuperAdminOrganizersPage() {
         return;
       }
 
-      // Check if user has SUPER_ADMIN role
-      const idTokenResult = await user.getIdTokenResult();
-      const role = idTokenResult.claims.role as string;
+      // Check if user is owner (email-based)
+      const userIsOwner = user.email === OWNER_EMAIL;
 
-      if (role !== "SUPER_ADMIN") {
-        toast.error("Access Denied: Super Admin only");
+      if (!userIsOwner) {
+        toast.error("Access Denied: Owner only");
         router.push("/");
         return;
       }
 
-      setUserRole(role);
+      setIsOwner(true);
       await loadOrganizers();
     } catch (error) {
       console.error("Access check error:", error);
@@ -320,7 +322,7 @@ export default function SuperAdminOrganizersPage() {
     );
   }
 
-  if (userRole !== "SUPER_ADMIN") {
+  if (!isOwner) {
     return null;
   }
 
@@ -334,10 +336,10 @@ export default function SuperAdminOrganizersPage() {
               <Shield className="w-8 h-8 text-red-600" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Super Admin Dashboard
+                  Owner Panel
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Organizers Bank Details (Owner Only)
+                  All Organizers Data (Owner Only)
                 </p>
               </div>
             </div>
