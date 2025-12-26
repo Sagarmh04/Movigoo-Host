@@ -20,12 +20,15 @@ function getFirebaseApp() {
   return getApp();
 }
 
-export const firebaseApp = getFirebaseApp();
-export const auth: Auth = getAuth(firebaseApp);
-export const db: Firestore = getFirestore(firebaseApp);
+const isBrowser = typeof window !== "undefined";
+
+export const firebaseApp = isBrowser ? getFirebaseApp() : (undefined as any);
+export const auth: Auth = isBrowser ? getAuth(firebaseApp) : (undefined as any);
+export const db: Firestore = isBrowser ? getFirestore(firebaseApp) : (undefined as any);
 
 // helper to get current user's idToken
 export async function getIdToken(): Promise<string | null> {
+  if (!auth) return null;
   const user = auth.currentUser;
   if (!user) return null;
   return await user.getIdToken();

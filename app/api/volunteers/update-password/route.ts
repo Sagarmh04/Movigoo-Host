@@ -1,6 +1,15 @@
 // API route for updating volunteer passwords with hashing
 import { NextRequest } from "next/server";
-import bcrypt from "bcryptjs";
+import { randomBytes, scrypt as _scrypt } from "crypto";
+import { promisify } from "util";
+
+const scrypt = promisify(_scrypt);
+
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
+  return `scrypt$${salt}$${derivedKey.toString("hex")}`;
+}
 
 export interface UpdatePasswordRequest {
   password: string;
@@ -34,8 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Hash password with bcrypt (10 salt rounds)
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await hashPassword(password);
 
     return new Response(
       JSON.stringify({
