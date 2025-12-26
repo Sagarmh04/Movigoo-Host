@@ -12,8 +12,18 @@ interface KycNotificationProps {
 export default function KycNotification({ kycStatus, onOpenKyc }: KycNotificationProps) {
   const [dismissed, setDismissed] = useState(false);
 
-  // Don't show if verified (only hide when verified, not when pending)
-  if (kycStatus === "verified" || dismissed) {
+  // STRICT CHECK: Only show banner for pending or not_started status
+  const showBanner = 
+    (kycStatus === "pending" || kycStatus === "not_started") && !dismissed;
+
+  // Reset dismissed state when status changes to verified
+  useEffect(() => {
+    if (kycStatus === "verified") {
+      setDismissed(false);
+    }
+  }, [kycStatus]);
+
+  if (!showBanner) {
     return null;
   }
 

@@ -34,7 +34,11 @@ interface KycStatus {
   kycDetails: any;
 }
 
-export default function VerificationTab() {
+interface VerificationTabProps {
+  onKycStatusChange?: () => void;
+}
+
+export default function VerificationTab({ onKycStatusChange }: VerificationTabProps = {}) {
   const [loading, setLoading] = useState(false);
   const [kycStatus, setKycStatus] = useState<KycStatus | null>(null);
   const [name, setName] = useState("");
@@ -219,6 +223,10 @@ export default function VerificationTab() {
       if (response.ok) {
         toast.success(data.message || "KYC submitted successfully!");
         await loadKycStatus();
+        // Notify parent to refresh KYC status
+        if (onKycStatusChange) {
+          onKycStatusChange();
+        }
       } else {
         toast.error(data.message || data.error || "Failed to submit KYC");
       }

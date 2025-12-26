@@ -36,22 +36,6 @@ import LogoutButton from "@/components/auth/LogoutButton";
 import KycNotification from "@/components/dashboard/KycNotification";
 import { auth } from "@/lib/firebase";
 
-const tabs = [
-  { id: "overview", label: "Overview", icon: Home, component: <DashboardOverview /> },
-  // { id: "bookings", label: "Bookings", icon: CalendarCheck, component: <BookingsTab /> },
-  { id: "listings", label: "EventListings", icon: Building2, component: <EventListingsTab /> },
-  // { id: "customers", label: "Customers", icon: Users, component: <CustomersTab /> },
-  { id: "payments", label: "Payments", icon: IndianRupee, component: <PaymentsTab /> },
-  // { id: "reviews", label: "Reviews", icon: Star, component: <ReviewsTab /> },
-  // { id: "messages", label: "Messages", icon: MessageSquare, component: <MessagesTab /> },
-  // { id: "offers", label: "Offers", icon: TicketPercent, component: <OffersTab /> },
-  { id: "analytics", label: "Analytics", icon: BarChart2, component: <AnalyticsTab /> },
-  { id: "crew", label: "Crew", icon: UserCog, component: <CrewTab /> },
-  { id: "support", label: "Support", icon: LifeBuoy, component: <SupportTab /> },
-  // { id: "settings", label: "Settings", icon: Settings, component: <SettingsTab /> },
-  { id: "verification", label: "Verification", icon: ShieldCheck, component: <VerificationTab /> },
-];
-
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [kycStatus, setKycStatus] = useState<string>("none");
@@ -59,6 +43,13 @@ export default function DashboardPage() {
   useEffect(() => {
     loadKycStatus();
   }, []);
+
+  // Refresh KYC status when switching to verification tab
+  useEffect(() => {
+    if (activeTab === "verification") {
+      loadKycStatus();
+    }
+  }, [activeTab]);
 
   const loadKycStatus = async () => {
     try {
@@ -87,6 +78,16 @@ export default function DashboardPage() {
   const openKycTab = () => {
     setActiveTab("verification");
   };
+
+  const tabs = [
+    { id: "overview", label: "Overview", icon: Home, component: <DashboardOverview /> },
+    { id: "listings", label: "EventListings", icon: Building2, component: <EventListingsTab /> },
+    { id: "payments", label: "Payments", icon: IndianRupee, component: <PaymentsTab /> },
+    { id: "analytics", label: "Analytics", icon: BarChart2, component: <AnalyticsTab /> },
+    { id: "crew", label: "Crew", icon: UserCog, component: <CrewTab /> },
+    { id: "support", label: "Support", icon: LifeBuoy, component: <SupportTab /> },
+    { id: "verification", label: "Verification", icon: ShieldCheck, component: <VerificationTab onKycStatusChange={loadKycStatus} /> },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
