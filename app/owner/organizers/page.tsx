@@ -55,6 +55,15 @@ export default function SuperAdminOrganizersPage() {
   // Owner email - single source of truth
   const OWNER_EMAIL = "movigoo4@gmail.com";
 
+  const getDisplayKycStatus = (realKycStatus: string) => {
+    return isOwner ? "verified" : (realKycStatus || "not_started");
+  };
+
+  const getDisplayBankStatus = (realPayoutStatus: string) => {
+    // This page historically uses payoutStatus as the "bank added" indicator (ADDED/NOT_ADDED)
+    return isOwner ? "ADDED" : (realPayoutStatus || "NOT_ADDED");
+  };
+
   useEffect(() => {
     checkAccess();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,32 +283,40 @@ export default function SuperAdminOrganizersPage() {
       "Payout Ready",
     ];
 
-    const rows = filteredOrganizers.map((org) => [
-      org.name,
-      org.email,
-      org.phone,
-      org.city || "N/A",
-      org.state || "N/A",
-      org.kycStatus,
-      formatDate(org.kycSubmittedAt),
-      formatDate(org.kycVerifiedAt),
-      org.bankDetails?.bankName || "N/A",
-      org.bankDetails?.ifscCode || "N/A",
-      org.bankDetails?.accountNumberLast4 ? `XXXXXX${org.bankDetails.accountNumberLast4}` : "N/A",
-      org.bankDetails?.beneficiaryName || "N/A",
-      org.bankDetails?.accountType || "N/A",
-      org.payoutStatus,
-      formatDate(org.bankAddedAt),
-      org.totalEvents,
-      org.totalTicketsSold,
-      org.totalRevenue,
-      org.payoutEligible,
-      org.kycStatus === "verified" && org.payoutStatus === "ADDED" ? "Yes" : "No",
-    ]);
+    const rows: Array<Array<string | number>> = filteredOrganizers.map((org) => {
+      const kycStatus = getDisplayKycStatus(org.kycStatus);
+      const bankStatus = getDisplayBankStatus(org.payoutStatus);
+      const payoutReady = kycStatus === "verified" && bankStatus === "ADDED";
+
+      return [
+        org.name,
+        org.email,
+        org.phone,
+        org.city || "N/A",
+        org.state || "N/A",
+        kycStatus,
+        formatDate(org.kycSubmittedAt),
+        formatDate(org.kycVerifiedAt),
+        org.bankDetails?.bankName || "N/A",
+        org.bankDetails?.ifscCode || "N/A",
+        org.bankDetails?.accountNumberLast4 ? `XXXXXX${org.bankDetails.accountNumberLast4}` : "N/A",
+        org.bankDetails?.beneficiaryName || "N/A",
+        org.bankDetails?.accountType || "N/A",
+        bankStatus,
+        formatDate(org.bankAddedAt),
+        org.totalEvents,
+        org.totalTicketsSold,
+        org.totalRevenue,
+        org.payoutEligible,
+        payoutReady ? "Yes" : "No",
+      ];
+    });
 
     const csvContent = [
       headers.join(","),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+      ...rows.map((row: Array<string | number>) =>
+        row.map((cell: string | number) => `"${cell}"`).join(",")
+      ),
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
@@ -366,13 +383,13 @@ export default function SuperAdminOrganizersPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-500">KYC Verified</p>
             <p className="text-3xl font-bold text-green-600 mt-2">
-              {organizers.filter((o) => o.kycStatus === "verified").length}
+              {organizers.filter((o) => getDisplayKycStatus(o.kycStatus) === "verified").length}
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-500">Bank Added</p>
             <p className="text-3xl font-bold text-blue-600 mt-2">
-              {organizers.filter((o) => o.payoutStatus === "ADDED").length}
+              {organizers.filter((o) => getDisplayBankStatus(o.payoutStatus) === "ADDED").length}
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
@@ -380,7 +397,9 @@ export default function SuperAdminOrganizersPage() {
             <p className="text-3xl font-bold text-purple-600 mt-2">
               {
                 organizers.filter(
-                  (o) => o.kycStatus === "verified" && o.payoutStatus === "ADDED"
+                  (o) =>
+                    getDisplayKycStatus(o.kycStatus) === "verified" &&
+                    getDisplayBankStatus(o.payoutStatus) === "ADDED"
                 ).length
               }
             </p>
@@ -455,7 +474,9 @@ export default function SuperAdminOrganizersPage() {
                 ) : (
                   filteredOrganizers.map((org) => {
                     const isExpanded = expandedRows.has(org.id);
-                    const isPayoutReady = org.kycStatus === "verified" && org.payoutStatus === "ADDED";
+                    const kycStatus = getDisplayKycStatus(org.kycStatus);
+                    const bankStatus = getDisplayBankStatus(org.payoutStatus);
+                    const isPayoutReady = kycStatus === "verified" && bankStatus === "ADDED";
                     
                     return (
                       <>
@@ -479,10 +500,10 @@ export default function SuperAdminOrganizersPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {getKycStatusBadge(org.kycStatus)}
+                            {getKycStatusBadge(kycStatus)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {getPayoutStatusBadge(org.payoutStatus)}
+                            {getPayoutStatusBadge(bankStatus)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">{org.totalEvents}</div>
@@ -521,7 +542,7 @@ export default function SuperAdminOrganizersPage() {
                                   <div className="space-y-2 text-sm">
                                     <div>
                                       <span className="text-gray-500">Status:</span>
-                                      <span className="ml-2">{getKycStatusBadge(org.kycStatus)}</span>
+                                      <span className="ml-2">{getKycStatusBadge(kycStatus)}</span>
                                     </div>
                                     <div>
                                       <span className="text-gray-500">Submitted:</span>

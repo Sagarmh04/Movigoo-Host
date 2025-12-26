@@ -112,7 +112,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       {/* KYC Notification Banner */}
-      <KycNotification kycStatus={kycStatus} onOpenKyc={openKycTab} />
+      <KycNotification kycStatus={isOwner ? "verified" : kycStatus} onOpenKyc={openKycTab} />
 
       <div className="flex flex-1">
         {/* Mobile Navbar */}
