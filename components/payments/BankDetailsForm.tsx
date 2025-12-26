@@ -152,13 +152,13 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
         <label className="block text-sm font-medium text-white mb-2">
           Beneficiary Name <span className="text-red-500">*</span>
         </label>
-        <p className="text-xs text-gray-500 mb-2">As per bank records</p>
+        <p className="text-xs text-gray-400 mb-2">As per bank records</p>
         <input
           type="text"
           value={formData.beneficiaryName}
           onChange={(e) => handleInputChange("beneficiaryName", e.target.value)}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-            errors.beneficiaryName ? "border-red-500" : "border-gray-300"
+          className={`w-full px-4 py-2 bg-[#3a3a3a] text-white placeholder:text-gray-400 border rounded-lg focus:border-white/30 focus:outline-none ${
+            errors.beneficiaryName ? "border-red-500" : "border-white/10"
           }`}
           placeholder="Enter beneficiary name"
         />
@@ -178,10 +178,10 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
         <select
           value={formData.accountType}
           onChange={(e) => handleInputChange("accountType", e.target.value as "SAVINGS" | "CURRENT")}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-4 py-2 bg-[#3a3a3a] text-white border border-white/10 rounded-lg focus:border-white/30 focus:outline-none"
         >
-          <option value="SAVINGS">Savings</option>
-          <option value="CURRENT">Current</option>
+          <option className="bg-[#3a3a3a] text-white" value="SAVINGS">Savings</option>
+          <option className="bg-[#3a3a3a] text-white" value="CURRENT">Current</option>
         </select>
       </div>
 
@@ -191,7 +191,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
           Bank Name <span className="text-red-500">*</span>
         </label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={18} />
           <input
             type="text"
             value={formData.bankName || searchTerm}
@@ -202,8 +202,8 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
               }
             }}
             onFocus={() => setShowBankDropdown(true)}
-            className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-              errors.bankName ? "border-red-500" : "border-gray-300"
+            className={`w-full pl-10 pr-4 py-2 bg-[#3a3a3a] text-white placeholder:text-gray-400 border rounded-lg focus:border-white/30 focus:outline-none ${
+              errors.bankName ? "border-red-500" : "border-white/10"
             }`}
             placeholder="Search for your bank"
           />
@@ -216,7 +216,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
         )}
         
         {showBankDropdown && filteredBanks.length > 0 && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          <div className="absolute z-10 w-full mt-1 bg-[#2a2a2a] border border-white/20 rounded-lg shadow-lg max-h-60 overflow-y-auto">
             {Object.entries(
               filteredBanks.reduce((acc, bank) => {
                 if (!acc[bank.category]) acc[bank.category] = [];
@@ -225,7 +225,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
               }, {} as Record<string, typeof INDIAN_BANKS>)
             ).map(([category, banks]) => (
               <div key={category}>
-                <div className="px-4 py-2 text-xs font-semibold text-gray-500 bg-gray-50 sticky top-0">
+                <div className="px-4 py-2 text-xs font-semibold text-gray-400 bg-[#1a1a1a] sticky top-0">
                   {category}
                 </div>
                 {banks.map((bank) => (
@@ -237,7 +237,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
                       setSearchTerm("");
                       setShowBankDropdown(false);
                     }}
-                    className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    className="w-full text-left px-4 py-2 text-white hover:bg-[#3a3a3a] focus:bg-[#3a3a3a] focus:outline-none"
                   >
                     {bank.name}
                   </button>
@@ -248,7 +248,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
         )}
         
         {formData.bankName && (
-          <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+          <div className="mt-2 flex items-center gap-2 text-sm text-green-400">
             <CheckCircle2 size={16} />
             <span>Selected: {formData.bankName}</span>
             <button
@@ -258,7 +258,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
                 setSearchTerm("");
                 setShowBankDropdown(true);
               }}
-              className="text-blue-600 hover:underline ml-auto"
+              className="text-blue-400 hover:underline ml-auto"
             >
               Change
             </button>
@@ -275,8 +275,8 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
           type="text"
           value={formData.accountNumber}
           onChange={(e) => handleInputChange("accountNumber", e.target.value.replace(/\D/g, ""))}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-            errors.accountNumber ? "border-red-500" : "border-gray-300"
+          className={`w-full px-4 py-2 bg-[#3a3a3a] text-white placeholder:text-gray-400 border rounded-lg focus:border-white/30 focus:outline-none ${
+            errors.accountNumber ? "border-red-500" : "border-white/10"
           }`}
           placeholder="Enter account number"
           maxLength={18}
@@ -298,8 +298,8 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
           type="text"
           value={formData.accountNumberConfirm}
           onChange={(e) => handleInputChange("accountNumberConfirm", e.target.value.replace(/\D/g, ""))}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-            errors.accountNumberConfirm ? "border-red-500" : "border-gray-300"
+          className={`w-full px-4 py-2 bg-[#3a3a3a] text-white placeholder:text-gray-400 border rounded-lg focus:border-white/30 focus:outline-none ${
+            errors.accountNumberConfirm ? "border-red-500" : "border-white/10"
           }`}
           placeholder="Re-enter account number"
           maxLength={18}
@@ -321,8 +321,8 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
           type="text"
           value={formData.ifscCode}
           onChange={(e) => handleInputChange("ifscCode", e.target.value.toUpperCase())}
-          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase ${
-            errors.ifscCode ? "border-red-500" : "border-gray-300"
+          className={`w-full px-4 py-2 bg-[#3a3a3a] text-white placeholder:text-gray-400 border rounded-lg focus:border-white/30 focus:outline-none uppercase ${
+            errors.ifscCode ? "border-red-500" : "border-white/10"
           }`}
           placeholder="e.g., SBIN0001234"
           maxLength={11}
@@ -333,7 +333,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
             {errors.ifscCode}
           </p>
         )}
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-400">
           Format: 4 letters + 0 + 6 alphanumeric characters
         </p>
       </div>
@@ -352,7 +352,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
             type="button"
             onClick={onCancel}
             disabled={submitting}
-            className="px-6 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 transition"
+            className="px-6 py-3 border border-white/20 text-white rounded-lg font-medium hover:bg-white/5 disabled:opacity-50 transition"
           >
             Cancel
           </button>
