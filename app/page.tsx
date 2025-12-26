@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Home,
   CalendarCheck,
@@ -15,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   UserCog,
+  Shield,
 } from "lucide-react";
 
 import DashboardOverview from "@/components/tabs/DashboardOverview";
@@ -37,11 +39,14 @@ import KycNotification from "@/components/dashboard/KycNotification";
 import { auth } from "@/lib/firebase";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
   const [kycStatus, setKycStatus] = useState<string>("none");
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     loadKycStatus();
+    checkUserRole();
   }, []);
 
   // Refresh KYC status when switching to verification tab
@@ -72,6 +77,18 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error loading KYC status:", error);
+    }
+  };
+
+  const checkUserRole = async () => {
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const idTokenResult = await user.getIdTokenResult();
+        setUserRole((idTokenResult.claims.role as string) || null);
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
     }
   };
 
@@ -126,7 +143,16 @@ export default function DashboardPage() {
             ))}
           </nav>
 
-          <div className="px-4 py-4 border-t">
+          <div className="px-4 py-4 border-t space-y-2">
+            {userRole === "SUPER_ADMIN" && (
+              <button
+                onClick={() => router.push("/super-admin/organizers")}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 transition"
+              >
+                <Shield size={18} />
+                Super Admin
+              </button>
+            )}
             <LogoutButton />
           </div>
         </aside>
