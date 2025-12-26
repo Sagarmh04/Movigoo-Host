@@ -143,15 +143,18 @@ export default function DashboardPage() {
             ))}
           </nav>
 
-          <div className="px-4 py-4 border-t space-y-2">
+          <div className="px-4 py-4 border-t">
             {userRole === "SUPER_ADMIN" && (
-              <button
-                onClick={() => router.push("/super-admin/organizers")}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 transition"
-              >
-                <Shield size={18} />
-                Super Admin
-              </button>
+              <>
+                <div className="mb-3 border-t border-gray-300" />
+                <button
+                  onClick={() => router.push("/super-admin/organizers")}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition mb-2"
+                >
+                  <Shield size={18} />
+                  Super Admin
+                </button>
+              </>
             )}
             <LogoutButton />
           </div>
