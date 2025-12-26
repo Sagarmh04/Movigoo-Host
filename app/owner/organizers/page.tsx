@@ -36,6 +36,11 @@ interface OrganizerData {
   };
   payoutStatus: string;
   bankAddedAt?: any;
+  payoutKyc?: {
+    enabled: boolean;
+    updatedAt?: any;
+    updatedBy?: string;
+  };
   events: EventData[];
   totalEvents: number;
   totalTicketsSold: number;
@@ -157,6 +162,7 @@ export default function SuperAdminOrganizersPage() {
           bankDetails: data.bankDetails,
           payoutStatus: data.payoutStatus || "NOT_ADDED",
           bankAddedAt: data.bankAddedAt,
+          payoutKyc: data.payoutKyc || { enabled: false },
           events,
           totalEvents: events.length,
           totalTicketsSold,
@@ -249,6 +255,40 @@ export default function SuperAdminOrganizersPage() {
     }).format(amount);
   };
 
+  const togglePayoutKyc = async (organizerId: string, currentEnabled: boolean) => {
+    try {
+      const user = auth.currentUser;
+      if (!user || user.email !== OWNER_EMAIL) {
+        toast.error("Unauthorized: Owner access only");
+        return;
+      }
+
+      const response = await fetch("/api/owner/toggle-payout-kyc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizerId,
+          enabled: !currentEnabled
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || "Failed to update payout KYC");
+        return;
+      }
+
+      toast.success(data.message);
+      
+      // Reload organizers to reflect the change
+      await loadOrganizers();
+    } catch (error: any) {
+      console.error("Error toggling payout KYC:", error);
+      toast.error("Failed to update payout KYC status");
+    }
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return "N/A";
     const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
@@ -286,7 +326,8 @@ export default function SuperAdminOrganizersPage() {
     const rows: Array<Array<string | number>> = filteredOrganizers.map((org) => {
       const kycStatus = getDisplayKycStatus(org.kycStatus);
       const bankStatus = getDisplayBankStatus(org.payoutStatus);
-      const payoutReady = kycStatus === "verified" && bankStatus === "ADDED";
+      // Payout ready logic: payoutKyc.enabled AND bank details added (NOT document KYC)
+      const payoutReady = org.payoutKyc?.enabled === true && bankStatus === "ADDED";
 
       return [
         org.name,
@@ -398,7 +439,7 @@ export default function SuperAdminOrganizersPage() {
               {
                 organizers.filter(
                   (o) =>
-                    getDisplayKycStatus(o.kycStatus) === "verified" &&
+                    o.payoutKyc?.enabled === true &&
                     getDisplayBankStatus(o.payoutStatus) === "ADDED"
                 ).length
               }
@@ -476,7 +517,8 @@ export default function SuperAdminOrganizersPage() {
                     const isExpanded = expandedRows.has(org.id);
                     const kycStatus = getDisplayKycStatus(org.kycStatus);
                     const bankStatus = getDisplayBankStatus(org.payoutStatus);
-                    const isPayoutReady = kycStatus === "verified" && bankStatus === "ADDED";
+                    // Payout ready logic: payoutKyc.enabled AND bank details added (NOT document KYC)
+                    const isPayoutReady = org.payoutKyc?.enabled === true && bankStatus === "ADDED";
                     
                     return (
                       <>
@@ -624,6 +666,38 @@ export default function SuperAdminOrganizersPage() {
                                         )}
                                       </span>
                                     </div>
+                                    
+                                    {/* Payout KYC Control (Owner Only) */}
+                                    {isOwner && (
+                                      <div className="pt-3 border-t mt-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-gray-500">Payout KYC:</span>
+                                          <span className="ml-2">
+                                            {org.payoutKyc?.enabled ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                <CheckCircle2 size={12} />
+                                                Enabled
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                <XCircle size={12} />
+                                                Disabled
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => togglePayoutKyc(org.id, org.payoutKyc?.enabled || false)}
+                                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition ${
+                                            org.payoutKyc?.enabled
+                                              ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                              : "bg-green-100 text-green-700 hover:bg-green-200"
+                                          }`}
+                                        >
+                                          {org.payoutKyc?.enabled ? "Disable KYC for Payout" : "Enable KYC for Payout"}
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
