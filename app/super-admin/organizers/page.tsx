@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { toast } from "sonner";
-import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp } from "lucide-react";
+import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck } from "lucide-react";
 
 interface EventData {
   id: string;
@@ -54,6 +54,7 @@ export default function SuperAdminOrganizersPage() {
 
   useEffect(() => {
     checkAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAccess = async () => {
