@@ -5,14 +5,28 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { toast } from "sonner";
-import { Shield, Search, Download, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp } from "lucide-react";
+
+interface EventData {
+  id: string;
+  title: string;
+  status: string;
+  ticketsSold: number;
+  revenue: number;
+  date: any;
+}
 
 interface OrganizerData {
   id: string;
   name: string;
   email: string;
   phone: string;
+  city?: string;
+  state?: string;
   kycStatus: string;
+  kycSubmittedAt?: any;
+  kycVerifiedAt?: any;
+  kycDetails?: any;
   bankDetails?: {
     beneficiaryName: string;
     accountType: string;
@@ -22,6 +36,12 @@ interface OrganizerData {
   };
   payoutStatus: string;
   bankAddedAt?: any;
+  events: EventData[];
+  totalEvents: number;
+  totalTicketsSold: number;
+  totalRevenue: number;
+  payoutEligible: number;
+  payoutHistory: any[];
 }
 
 export default function SuperAdminOrganizersPage() {
@@ -30,6 +50,7 @@ export default function SuperAdminOrganizersPage() {
   const [organizers, setOrganizers] = useState<OrganizerData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     checkAccess();
@@ -83,15 +104,53 @@ export default function SuperAdminOrganizersPage() {
           userProfile = userDoc.docs[0].data().profile || {};
         }
 
+        // Get organizer's events
+        const eventsRef = collection(db, "events");
+        const eventsQuery = query(eventsRef, where("organizerId", "==", doc.id));
+        const eventsSnapshot = await getDocs(eventsQuery);
+        
+        const events: EventData[] = [];
+        let totalTicketsSold = 0;
+        let totalRevenue = 0;
+        
+        eventsSnapshot.forEach((eventDoc) => {
+          const eventData = eventDoc.data();
+          const ticketsSold = eventData.ticketsSold || 0;
+          const revenue = eventData.totalRevenue || 0;
+          
+          events.push({
+            id: eventDoc.id,
+            title: eventData.title || "Untitled Event",
+            status: eventData.status || "draft",
+            ticketsSold,
+            revenue,
+            date: eventData.date || eventData.createdAt,
+          });
+          
+          totalTicketsSold += ticketsSold;
+          totalRevenue += revenue;
+        });
+
         organizersData.push({
           id: doc.id,
           name: userProfile.name || data.name || "N/A",
           email: userProfile.email || data.email || "N/A",
           phone: userProfile.phone || data.phone || "N/A",
+          city: userProfile.city || data.city,
+          state: userProfile.state || data.state,
           kycStatus: data.kycStatus || "not_started",
+          kycSubmittedAt: data.kycSubmittedAt,
+          kycVerifiedAt: data.kycVerifiedAt,
+          kycDetails: data.kycDetails,
           bankDetails: data.bankDetails,
           payoutStatus: data.payoutStatus || "NOT_ADDED",
           bankAddedAt: data.bankAddedAt,
+          events,
+          totalEvents: events.length,
+          totalTicketsSold,
+          totalRevenue,
+          payoutEligible: totalRevenue * 0.85, // 85% after platform fee
+          payoutHistory: data.payoutHistory || [],
         });
       }
 
@@ -160,31 +219,79 @@ export default function SuperAdminOrganizersPage() {
     );
   };
 
+  const toggleRowExpansion = (organizerId: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(organizerId)) {
+      newExpanded.delete(organizerId);
+    } else {
+      newExpanded.add(organizerId);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return "N/A";
+    const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   const exportToCSV = () => {
     const headers = [
       "Organizer Name",
       "Email",
       "Phone",
+      "City",
+      "State",
       "KYC Status",
+      "KYC Submitted",
+      "KYC Verified",
       "Bank Name",
       "IFSC Code",
       "Account Number",
+      "Beneficiary Name",
+      "Account Type",
       "Payout Status",
       "Bank Added Date",
+      "Total Events",
+      "Total Tickets Sold",
+      "Total Revenue",
+      "Payout Eligible",
+      "Payout Ready",
     ];
 
     const rows = filteredOrganizers.map((org) => [
       org.name,
       org.email,
       org.phone,
+      org.city || "N/A",
+      org.state || "N/A",
       org.kycStatus,
+      formatDate(org.kycSubmittedAt),
+      formatDate(org.kycVerifiedAt),
       org.bankDetails?.bankName || "N/A",
       org.bankDetails?.ifscCode || "N/A",
       org.bankDetails?.accountNumberLast4 ? `XXXXXX${org.bankDetails.accountNumberLast4}` : "N/A",
+      org.bankDetails?.beneficiaryName || "N/A",
+      org.bankDetails?.accountType || "N/A",
       org.payoutStatus,
-      org.bankAddedAt
-        ? new Date(org.bankAddedAt.seconds * 1000).toLocaleDateString()
-        : "N/A",
+      formatDate(org.bankAddedAt),
+      org.totalEvents,
+      org.totalTicketsSold,
+      org.totalRevenue,
+      org.payoutEligible,
+      org.kycStatus === "verified" && org.payoutStatus === "ADDED" ? "Yes" : "No",
     ]);
 
     const csvContent = [
@@ -246,7 +353,7 @@ export default function SuperAdminOrganizersPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm font-medium text-gray-500">Total Organizers</p>
             <p className="text-3xl font-bold text-gray-900 mt-2">
@@ -273,6 +380,12 @@ export default function SuperAdminOrganizersPage() {
                   (o) => o.kycStatus === "verified" && o.payoutStatus === "ADDED"
                 ).length
               }
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <p className="text-sm font-medium text-gray-500">Total Revenue</p>
+            <p className="text-2xl font-bold text-indigo-600 mt-2">
+              {formatCurrency(organizers.reduce((sum, o) => sum + o.totalRevenue, 0))}
             </p>
           </div>
         </div>
@@ -306,100 +419,238 @@ export default function SuperAdminOrganizersPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Organizer Name
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">
+                    
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
+                    Organizer
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    KYC Status
+                    KYC
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Bank Name
+                    Bank Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    IFSC Code
+                    Events
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Account Number
+                    Revenue
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Payout Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Bank Added
+                    Payout Ready
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredOrganizers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                       No organizers found
                     </td>
                   </tr>
                 ) : (
-                  filteredOrganizers.map((org) => (
-                    <tr key={org.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {org.name}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{org.email}</div>
-                        <div className="text-sm text-gray-500">{org.phone}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getKycStatusBadge(org.kycStatus)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {org.bankDetails?.bankName || (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-mono text-gray-900">
-                          {org.bankDetails?.ifscCode || (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-mono text-gray-900">
-                          {org.bankDetails?.accountNumberLast4 ? (
-                            <span className="bg-gray-100 px-2 py-1 rounded">
-                              XXXXXX{org.bankDetails.accountNumberLast4}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getPayoutStatusBadge(org.payoutStatus)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {org.bankAddedAt ? (
-                            new Date(org.bankAddedAt.seconds * 1000).toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              }
-                            )
-                          ) : (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  filteredOrganizers.map((org) => {
+                    const isExpanded = expandedRows.has(org.id);
+                    const isPayoutReady = org.kycStatus === "verified" && org.payoutStatus === "ADDED";
+                    
+                    return (
+                      <>
+                        <tr key={org.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => toggleRowExpansion(org.id)}
+                              className="text-gray-500 hover:text-gray-700"
+                            >
+                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            </button>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                            <div className="text-xs text-gray-500">{org.email}</div>
+                            <div className="text-xs text-gray-500">{org.phone}</div>
+                            {(org.city || org.state) && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                {[org.city, org.state].filter(Boolean).join(", ")}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getKycStatusBadge(org.kycStatus)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getPayoutStatusBadge(org.payoutStatus)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{org.totalEvents}</div>
+                            <div className="text-xs text-gray-500">{org.totalTicketsSold} tickets</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              {formatCurrency(org.totalRevenue)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isPayoutReady ? (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <CheckCircle2 size={14} />
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                <XCircle size={14} />
+                                Not Ready
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        
+                        {isExpanded && (
+                          <tr key={`${org.id}-details`}>
+                            <td colSpan={7} className="px-6 py-6 bg-gray-50">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* KYC Details */}
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <ShieldCheck size={16} className="text-blue-600" />
+                                    KYC Details
+                                  </h4>
+                                  <div className="space-y-2 text-sm">
+                                    <div>
+                                      <span className="text-gray-500">Status:</span>
+                                      <span className="ml-2">{getKycStatusBadge(org.kycStatus)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Submitted:</span>
+                                      <span className="ml-2 text-gray-900">{formatDate(org.kycSubmittedAt)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Verified:</span>
+                                      <span className="ml-2 text-gray-900">{formatDate(org.kycVerifiedAt)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Bank Details */}
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <DollarSign size={16} className="text-green-600" />
+                                    Bank Details
+                                  </h4>
+                                  {org.bankDetails ? (
+                                    <div className="space-y-2 text-sm">
+                                      <div>
+                                        <span className="text-gray-500">Beneficiary:</span>
+                                        <span className="ml-2 text-gray-900">{org.bankDetails.beneficiaryName}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Bank:</span>
+                                        <span className="ml-2 text-gray-900">{org.bankDetails.bankName}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">IFSC:</span>
+                                        <span className="ml-2 font-mono text-gray-900">{org.bankDetails.ifscCode}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Account:</span>
+                                        <span className="ml-2 font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-900">
+                                          XXXXXX{org.bankDetails.accountNumberLast4}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Type:</span>
+                                        <span className="ml-2 text-gray-900">{org.bankDetails.accountType}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Added:</span>
+                                        <span className="ml-2 text-gray-900">{formatDate(org.bankAddedAt)}</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-400">No bank details added</p>
+                                  )}
+                                </div>
+
+                                {/* Payout Summary */}
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <TrendingUp size={16} className="text-purple-600" />
+                                    Payout Summary
+                                  </h4>
+                                  <div className="space-y-2 text-sm">
+                                    <div>
+                                      <span className="text-gray-500">Total Revenue:</span>
+                                      <span className="ml-2 font-semibold text-gray-900">{formatCurrency(org.totalRevenue)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Platform Fee (15%):</span>
+                                      <span className="ml-2 text-gray-900">{formatCurrency(org.totalRevenue * 0.15)}</span>
+                                    </div>
+                                    <div className="pt-2 border-t">
+                                      <span className="text-gray-500">Payout Eligible:</span>
+                                      <span className="ml-2 font-bold text-green-600">{formatCurrency(org.payoutEligible)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Status:</span>
+                                      <span className="ml-2">
+                                        {isPayoutReady ? (
+                                          <span className="text-green-600 font-medium">✓ Ready for Payout</span>
+                                        ) : (
+                                          <span className="text-orange-600 font-medium">⚠ Pending KYC/Bank</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Events List */}
+                              {org.events.length > 0 && (
+                                <div className="mt-6 bg-white rounded-lg p-4 shadow-sm">
+                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <Calendar size={16} className="text-indigo-600" />
+                                    Events ({org.events.length})
+                                  </h4>
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                      <thead className="bg-gray-50">
+                                        <tr>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Event Name</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Tickets Sold</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-200">
+                                        {org.events.map((event) => (
+                                          <tr key={event.id} className="hover:bg-gray-50">
+                                            <td className="px-4 py-2 text-sm text-gray-900">{event.title}</td>
+                                            <td className="px-4 py-2 text-sm">
+                                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                event.status === "published" ? "bg-green-100 text-green-800" :
+                                                event.status === "completed" ? "bg-blue-100 text-blue-800" :
+                                                "bg-gray-100 text-gray-800"
+                                              }`}>
+                                                {event.status}
+                                              </span>
+                                            </td>
+                                            <td className="px-4 py-2 text-sm text-gray-900">{event.ticketsSold}</td>
+                                            <td className="px-4 py-2 text-sm font-medium text-gray-900">{formatCurrency(event.revenue)}</td>
+                                            <td className="px-4 py-2 text-sm text-gray-500">{formatDate(event.date)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })
                 )}
               </tbody>
             </table>
