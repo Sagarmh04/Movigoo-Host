@@ -1,5 +1,6 @@
 // API route for sending support ticket email notifications
 import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
 
 const SUPPORT_EMAIL = "movigootech@gmail.com";
 
@@ -62,36 +63,33 @@ Movigoo Support Team
   }
 }
 
-// Email sending function (using Firebase Cloud Function or external service)
+// Email sending function using Resend
 async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  // Option 1: Use existing Firebase Cloud Function for email
-  const emailFunctionUrl = process.env.FIREBASE_CF_SEND_EMAIL_URL;
-  
-  if (emailFunctionUrl) {
-    try {
-      const response = await fetch(emailFunctionUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to,
-          subject,
-          text: body,
-        }),
-      });
+  const apiKey = process.env.RESEND_API_KEY;
 
-      if (!response.ok) {
-        throw new Error(`Email service returned ${response.status}`);
-      }
-    } catch (error) {
-      console.error("Failed to send email via Cloud Function:", error);
-      // Log but don't fail - email is not critical
-    }
-  } else {
-    // Fallback: Log email (for development)
-    console.log("=== EMAIL NOTIFICATION ===");
+  if (!apiKey) {
+    // Development fallback: Log email to console
+    console.log("=== EMAIL NOTIFICATION (No RESEND_API_KEY) ===");
     console.log(`To: ${to}`);
     console.log(`Subject: ${subject}`);
     console.log(`Body:\n${body}`);
-    console.log("========================");
+    console.log("=============================================");
+    return;
+  }
+
+  try {
+    const resend = new Resend(apiKey);
+    
+    await resend.emails.send({
+      from: "Movigoo Support <onboarding@resend.dev>",
+      to,
+      subject,
+      text: body,
+    });
+
+    console.log(`✅ Email sent successfully to ${to}`);
+  } catch (error) {
+    console.error("Failed to send email via Resend:", error);
+    // Log but don't throw - email failure should not break ticket creation
   }
 }
