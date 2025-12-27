@@ -83,8 +83,7 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
   const ticketsRef = collection(db, "supportTickets");
   const q = query(
     ticketsRef,
-    where("userId", "==", user.uid),
-    orderBy("updatedAt", "desc")
+    where("userId", "==", user.uid)
   );
 
   const snapshot = await getDocs(q);
@@ -108,6 +107,13 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
     });
   }
 
+  // Sort client-side by updatedAt descending (most recent first)
+  tickets.sort((a, b) => {
+    const aTime = a.updatedAt?.seconds || 0;
+    const bTime = b.updatedAt?.seconds || 0;
+    return bTime - aTime;
+  });
+
   return tickets;
 }
 
@@ -119,7 +125,7 @@ export async function getAllTickets(): Promise<SupportTicket[]> {
   }
 
   const ticketsRef = collection(db, "supportTickets");
-  const q = query(ticketsRef, orderBy("updatedAt", "desc"));
+  const q = query(ticketsRef);
 
   const snapshot = await getDocs(q);
   const tickets: SupportTicket[] = [];
@@ -141,6 +147,13 @@ export async function getAllTickets(): Promise<SupportTicket[]> {
       updatedAt: data.updatedAt,
     });
   }
+
+  // Sort client-side by updatedAt descending (most recent first)
+  tickets.sort((a, b) => {
+    const aTime = a.updatedAt?.seconds || 0;
+    const bTime = b.updatedAt?.seconds || 0;
+    return bTime - aTime;
+  });
 
   return tickets;
 }
