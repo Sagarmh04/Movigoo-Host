@@ -20,14 +20,16 @@ export default function TicketConversation({
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
+  const [isSupport, setIsSupport] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const OWNER_EMAIL = "movigoo4@gmail.com";
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
 
   useEffect(() => {
     const user = auth.currentUser;
-    setIsOwner(user?.email === OWNER_EMAIL);
+    setIsSupport(SUPPORT_EMAILS.includes(user?.email ?? ""));
+    setCurrentUserId(user?.uid || null);
   }, []);
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function TicketConversation({
 
     setSending(true);
     try {
-      const sender = isOwner ? "SUPPORT" : "USER";
+      const sender = isSupport ? "SUPPORT" : "USER";
       await replyToTicket(ticket.id, newMessage.trim(), sender);
       setNewMessage("");
       await loadMessages();
@@ -92,6 +94,11 @@ export default function TicketConversation({
       toast.error(error.message || "Failed to update status");
     }
   };
+
+  // Determine if current user can reply
+  const canReply =
+    ticket.status !== "CLOSED" &&
+    (ticket.userId === currentUserId || isSupport);
 
   const getStatusBadge = (status: TicketStatus) => {
     const styles = {
@@ -153,8 +160,8 @@ export default function TicketConversation({
           </div>
         </div>
 
-        {/* Owner Controls */}
-        {isOwner && ticket.status !== "CLOSED" && (
+        {/* Support Controls */}
+        {isSupport && ticket.status !== "CLOSED" && (
           <div className="mt-4 pt-4 border-t">
             <label className="text-sm font-medium text-gray-700 mr-3">Change Status:</label>
             <select
@@ -220,11 +227,15 @@ export default function TicketConversation({
       </div>
 
       {/* Reply Input */}
-      {ticket.status === "CLOSED" ? (
+      {!canReply ? (
         <div className="bg-gray-100 border-t p-4">
           <div className="flex items-center justify-center gap-2 text-gray-600">
             <AlertCircle size={20} />
-            <span className="text-sm font-medium">This ticket is closed and cannot receive new replies</span>
+            <span className="text-sm font-medium">
+              {ticket.status === "CLOSED"
+                ? "This ticket is closed and cannot receive new replies"
+                : "You do not have permission to reply to this ticket"}
+            </span>
           </div>
         </div>
       ) : (
@@ -236,11 +247,11 @@ export default function TicketConversation({
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={sending}
+              disabled={sending || !canReply}
             />
             <button
               type="submit"
-              disabled={sending || !newMessage.trim()}
+              disabled={sending || !newMessage.trim() || !canReply}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <Send size={18} />

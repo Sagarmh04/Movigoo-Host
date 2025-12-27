@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { toast } from "sonner";
-import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck } from "lucide-react";
+import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck, MessageSquare } from "lucide-react";
 
 interface EventData {
   id: string;
@@ -237,14 +237,20 @@ export default function SuperAdminOrganizersPage() {
     );
   };
 
-  const toggleRowExpansion = (organizerId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(organizerId)) {
-      newExpanded.delete(organizerId);
-    } else {
-      newExpanded.add(organizerId);
-    }
-    setExpandedRows(newExpanded);
+  const toggleRowExpansion = (id: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleViewSupport = (userId: string) => {
+    router.push(`/?userId=${userId}#support`);
   };
 
   const formatCurrency = (amount: number) => {
@@ -523,17 +529,27 @@ export default function SuperAdminOrganizersPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {isPayoutReady ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                <CheckCircle2 size={14} />
-                                Ready
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                <XCircle size={14} />
-                                Not Ready
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {isPayoutReady ? (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  <CheckCircle2 size={14} />
+                                  Ready
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                  <XCircle size={14} />
+                                  Not Ready
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleViewSupport(org.id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
+                                title="View Support Chat"
+                              >
+                                <MessageSquare size={14} />
+                                Support
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         

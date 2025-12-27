@@ -117,11 +117,14 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
   return tickets;
 }
 
-// Get all tickets (owner only)
+// Get all tickets (support only)
 export async function getAllTickets(): Promise<SupportTicket[]> {
   const user = auth.currentUser;
-  if (!user || user.email !== "movigoo4@gmail.com") {
-    throw new Error("Unauthorized: Owner access only");
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
+  const isSupport = SUPPORT_EMAILS.includes(user?.email ?? "");
+  
+  if (!user || !isSupport) {
+    throw new Error("Unauthorized: Support access only");
   }
 
   const ticketsRef = collection(db, "supportTickets");
@@ -200,11 +203,12 @@ export async function replyToTicket(
 
   const ticketData = ticketSnap.data();
 
-  // Check if user owns ticket or is owner
-  if (
-    ticketData.userId !== user.uid &&
-    user.email !== "movigoo4@gmail.com"
-  ) {
+  // Support emails that can reply to any ticket
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
+  const isSupport = SUPPORT_EMAILS.includes(user.email ?? "");
+
+  // Check if user owns ticket or is support
+  if (ticketData.userId !== user.uid && !isSupport) {
     throw new Error("Unauthorized");
   }
 
@@ -237,8 +241,11 @@ export async function updateTicketStatus(
   status: TicketStatus
 ): Promise<void> {
   const user = auth.currentUser;
-  if (!user || user.email !== "movigoo4@gmail.com") {
-    throw new Error("Unauthorized: Owner access only");
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
+  const isSupport = SUPPORT_EMAILS.includes(user?.email ?? "");
+  
+  if (!user || !isSupport) {
+    throw new Error("Unauthorized: Support access only");
   }
 
   const ticketRef = doc(db, "supportTickets", ticketId);
@@ -264,8 +271,12 @@ export async function getTicketDetails(
 
   const data = ticketSnap.data();
 
+  // Support emails that can view any ticket
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
+  const isSupport = SUPPORT_EMAILS.includes(user.email ?? "");
+
   // Check access
-  if (data.userId !== user.uid && user.email !== "movigoo4@gmail.com") {
+  if (data.userId !== user.uid && !isSupport) {
     throw new Error("Unauthorized");
   }
 

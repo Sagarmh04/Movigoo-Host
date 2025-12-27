@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { SupportTicket } from "@/lib/types/support";
 import { getUserTickets, getAllTickets, getTicketDetails } from "@/lib/api/support";
@@ -9,6 +10,8 @@ import TicketsList from "@/components/support/TicketsList";
 import TicketConversation from "@/components/support/TicketConversation";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function SupportTab() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -16,14 +19,16 @@ export default function SupportTab() {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isOwner, setIsOwner] = useState(false);
+  const [isSupport, setIsSupport] = useState(false);
+  const searchParams = useSearchParams();
 
-  const OWNER_EMAIL = "movigoo4@gmail.com";
+  const SUPPORT_EMAILS = ["movigootech@gmail.com", "movigoo4@gmail.com"];
 
   useEffect(() => {
     const user = auth.currentUser;
-    setIsOwner(user?.email === OWNER_EMAIL);
-    loadTickets();
+    const userIsSupport = SUPPORT_EMAILS.includes(user?.email ?? "");
+    setIsSupport(userIsSupport);
+    loadTickets(userIsSupport);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -33,7 +38,7 @@ export default function SupportTab() {
     }
   }, [selectedTicketId]);
 
-  const loadTickets = async () => {
+  const loadTickets = async (userIsSupport: boolean) => {
     setLoading(true);
     try {
       const user = auth.currentUser;
@@ -42,12 +47,69 @@ export default function SupportTab() {
         return;
       }
 
-      const ticketsList = isOwner ? await getAllTickets() : await getUserTickets();
+      // Read query params
+      const targetUserId = searchParams?.get("userId");
+      const targetTicketId = searchParams?.get("ticketId");
+
+      let ticketsList: SupportTicket[] = [];
+
+      // Security: Only support users can access other users' tickets
+      if (targetUserId && userIsSupport) {
+        // Fetch tickets for specific user
+        const ticketsRef = collection(db, "supportTickets");
+        const q = query(ticketsRef, where("userId", "==", targetUserId));
+        const snapshot = await getDocs(q);
+        
+        ticketsList = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ticketId: data.ticketId,
+            userId: data.userId,
+            userEmail: data.userEmail,
+            userName: data.userName,
+            category: data.category,
+            subject: data.subject,
+            description: data.description,
+            status: data.status,
+            priority: data.priority,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          };
+        });
+
+        // Sort by updatedAt descending
+        ticketsList.sort((a, b) => {
+          const aTime = a.updatedAt?.seconds || 0;
+          const bTime = b.updatedAt?.seconds || 0;
+          return bTime - aTime;
+        });
+      } else {
+        // Normal behavior: fetch user's own tickets or all tickets (for support)
+        ticketsList = userIsSupport ? await getAllTickets() : await getUserTickets();
+      }
+
       setTickets(ticketsList);
 
-      // Auto-select first ticket if none selected
-      if (ticketsList.length > 0 && !selectedTicketId) {
-        setSelectedTicketId(ticketsList[0].id);
+      // Auto-selection logic
+      if (ticketsList.length > 0) {
+        let ticketToSelect: string | null = null;
+
+        // If ticketId is specified and exists in the list, select it
+        if (targetTicketId) {
+          const foundTicket = ticketsList.find((t) => t.id === targetTicketId);
+          if (foundTicket) {
+            ticketToSelect = foundTicket.id;
+          }
+        }
+
+        // Otherwise, select most recent OPEN ticket
+        if (!ticketToSelect) {
+          const openTicket = ticketsList.find((t) => t.status === "OPEN");
+          ticketToSelect = openTicket ? openTicket.id : ticketsList[0].id;
+        }
+
+        setSelectedTicketId(ticketToSelect);
       }
     } catch (error: any) {
       console.error("Error loading tickets:", error);
@@ -68,11 +130,11 @@ export default function SupportTab() {
   };
 
   const handleTicketCreated = () => {
-    loadTickets();
+    loadTickets(isSupport);
   };
 
   const handleTicketUpdated = () => {
-    loadTickets();
+    loadTickets(isSupport);
     if (selectedTicketId) {
       loadTicketDetails(selectedTicketId);
     }
@@ -89,7 +151,7 @@ export default function SupportTab() {
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Support & Tickets</h1>
           <p className="text-gray-500 mt-1">
-            {isOwner
+            {isSupport
               ? "Manage all support requests and respond to user issues."
               : "Get help with your events and account."}
           </p>
