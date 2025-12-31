@@ -50,6 +50,14 @@ export default function DashboardPage() {
   useEffect(() => {
     loadKycStatus();
     checkOwnerAccess();
+    
+    // Check for hash in URL to switch tabs (e.g., #support from owner panel)
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hash = window.location.hash.substring(1); // Remove the '#'
+      if (hash) {
+        setActiveTab(hash);
+      }
+    }
   }, []);
 
   // Refresh KYC status when switching to verification tab
