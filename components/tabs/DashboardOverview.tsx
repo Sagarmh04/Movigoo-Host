@@ -124,9 +124,9 @@ export default function DashboardOverview() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Total Bookings</p>
-              <h2 className="text-3xl font-bold mt-2">{displayStats.totalBookings}</h2>
+              <h2 className="text-3xl font-bold mt-2">{displayStats.confirmedBookings}</h2>
               <p className="text-xs text-gray-400 mt-1">
-                {displayStats.confirmedBookings} confirmed
+                Confirmed bookings only
               </p>
             </div>
             <CalendarCheck className="h-8 w-8 text-blue-500" />
@@ -136,10 +136,13 @@ export default function DashboardOverview() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Total Revenue</p>
+              <p className="text-gray-500 text-sm">Gross Revenue (Before Payout)</p>
               <h2 className="text-3xl font-bold mt-2">{formatCurrency(displayStats.totalRevenue)}</h2>
               <p className="text-xs text-gray-400 mt-1">
                 {formatCurrency(displayStats.revenueThisMonth)} this month
+              </p>
+              <p className="text-xs text-gray-500 mt-2 italic">
+                Payouts are processed manually by Movigoo after event completion.
               </p>
             </div>
             <IndianRupee className="h-8 w-8 text-green-500" />
@@ -226,7 +229,7 @@ export default function DashboardOverview() {
             </h3>
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            Revenue vs last month
+            Gross revenue vs last month
           </p>
         </div>
       </div>
@@ -248,7 +251,7 @@ export default function DashboardOverview() {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Top Revenue Events</h2>
+          <h2 className="text-xl font-semibold mb-4">Top Gross Revenue Events</h2>
           {displayStats.revenueByEvent.length > 0 ? (
             <div className="space-y-2">
               {displayStats.revenueByEvent.slice(0, 3).map((event) => (

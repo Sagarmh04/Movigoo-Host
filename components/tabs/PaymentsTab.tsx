@@ -174,13 +174,13 @@ export default function PaymentsTab() {
     }
 
     return (
-      <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center gap-3 mb-6">
           <Landmark className="w-6 h-6 text-blue-600" />
           <h2 className="text-xl font-semibold text-gray-900">Add Bank Details</h2>
         </div>
         <p className="text-gray-600 mb-6">
-          Add your bank account details to receive payouts for your events.
+          Add your bank account details. Payouts are processed manually by Movigoo after event completion.
         </p>
         <BankDetailsForm
           onSubmit={handleSaveBankDetails}
@@ -193,27 +193,13 @@ export default function PaymentsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">Payments & Payouts</h1>
+        <h1 className="text-3xl font-semibold text-gray-900">Bank Details</h1>
         <p className="text-gray-500 mt-1">
-          Track earnings, settlement details, and payout activity.
+          Manage your bank account information for manual payouts processed by Movigoo.
         </p>
       </div>
 
       {renderBankDetailsSection()}
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">Earnings Overview</h2>
-        <p className="text-gray-500">
-          Earnings chart/summary placeholder.
-        </p>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">Payout Requests</h2>
-        <p className="text-gray-500">
-          Payout request table placeholder.
-        </p>
-      </div>
 
       <EditConfirmationModal
         isOpen={showEditModal}

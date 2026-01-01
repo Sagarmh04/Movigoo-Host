@@ -168,12 +168,13 @@ function computeEventStats(events: any[]) {
 
 /**
  * Compute booking-related statistics
+ * IMPORTANT: Revenue and tickets sold only count CONFIRMED bookings
  */
 function computeBookingStats(bookings: any[], events: any[]) {
   const totalBookings = bookings.length;
   
-  let totalTicketsSold = 0;
-  let totalRevenue = 0;
+  let totalTicketsSold = 0; // Only confirmed bookings
+  let totalRevenue = 0; // Only confirmed bookings (Gross Revenue)
   let pendingBookings = 0;
   let confirmedBookings = 0;
   
@@ -181,14 +182,15 @@ function computeBookingStats(bookings: any[], events: any[]) {
     const ticketCount = booking.ticketCount || booking.quantity || 1;
     const amount = booking.amount || booking.total || 0;
     const status = booking.status || "pending";
-    
-    totalTicketsSold += ticketCount;
-    totalRevenue += amount;
+    const normalizedStatus = status.toLowerCase();
     
     if (status === "pending") {
       pendingBookings++;
-    } else if (status === "confirmed" || status === "completed") {
+    } else if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
       confirmedBookings++;
+      // Only count revenue and tickets for CONFIRMED bookings
+      totalTicketsSold += ticketCount;
+      totalRevenue += amount;
     }
   });
 
@@ -221,11 +223,12 @@ function computeCustomerStats(bookings: any[]) {
 
 /**
  * Compute ticket-related statistics
+ * IMPORTANT: Tickets sold only counts CONFIRMED bookings
  */
 function computeTicketStats(events: any[], bookings: any[]) {
   let totalTicketTypes = 0;
   let totalTicketCapacity = 0;
-  let ticketsSold = 0;
+  let ticketsSold = 0; // Only confirmed bookings
   
   events.forEach(event => {
     const venueConfigs = event.tickets?.venueConfigs || [];
@@ -240,7 +243,13 @@ function computeTicketStats(events: any[], bookings: any[]) {
   });
   
   bookings.forEach(booking => {
-    ticketsSold += booking.ticketCount || booking.quantity || 1;
+    const status = booking.status || "pending";
+    const normalizedStatus = status.toLowerCase();
+    
+    // Only count CONFIRMED bookings for tickets sold
+    if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
+      ticketsSold += booking.ticketCount || booking.quantity || 1;
+    }
   });
   
   const ticketsRemaining = Math.max(0, totalTicketCapacity - ticketsSold);
@@ -258,24 +267,31 @@ function computeTicketStats(events: any[], bookings: any[]) {
 
 /**
  * Compute revenue-related statistics
+ * IMPORTANT: Only counts CONFIRMED bookings for Gross Revenue
  */
 function computeRevenueStats(bookings: any[], events: any[]) {
-  let totalRevenue = 0;
-  let totalTickets = 0;
+  let totalRevenue = 0; // Gross Revenue (confirmed bookings only)
+  let totalTickets = 0; // Tickets from confirmed bookings only
   const revenueByEvent: Array<{ eventId: string; eventTitle: string; revenue: number }> = [];
   const eventRevenueMap = new Map<string, number>();
   
   bookings.forEach(booking => {
-    const amount = booking.amount || booking.total || 0;
-    const ticketCount = booking.ticketCount || booking.quantity || 1;
-    const eventId = booking.eventId;
+    const status = booking.status || "pending";
+    const normalizedStatus = status.toLowerCase();
     
-    totalRevenue += amount;
-    totalTickets += ticketCount;
-    
-    if (eventId) {
-      const current = eventRevenueMap.get(eventId) || 0;
-      eventRevenueMap.set(eventId, current + amount);
+    // Only count CONFIRMED bookings for revenue
+    if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
+      const amount = booking.amount || booking.total || 0;
+      const ticketCount = booking.ticketCount || booking.quantity || 1;
+      const eventId = booking.eventId;
+      
+      totalRevenue += amount;
+      totalTickets += ticketCount;
+      
+      if (eventId) {
+        const current = eventRevenueMap.get(eventId) || 0;
+        eventRevenueMap.set(eventId, current + amount);
+      }
     }
   });
   
@@ -361,6 +377,7 @@ function computePerformanceStats(events: any[], bookings: any[]) {
 
 /**
  * Compute time-based statistics
+ * IMPORTANT: Only counts CONFIRMED bookings for revenue
  */
 function computeTimeBasedStats(bookings: any[]) {
   const now = new Date();
@@ -368,12 +385,20 @@ function computeTimeBasedStats(bookings: any[]) {
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
   
-  let bookingsThisMonth = 0;
-  let revenueThisMonth = 0;
-  let bookingsLastMonth = 0;
-  let revenueLastMonth = 0;
+  let bookingsThisMonth = 0; // Only confirmed
+  let revenueThisMonth = 0; // Gross Revenue (confirmed only)
+  let bookingsLastMonth = 0; // Only confirmed
+  let revenueLastMonth = 0; // Gross Revenue (confirmed only)
   
   bookings.forEach(booking => {
+    const status = booking.status || "pending";
+    const normalizedStatus = status.toLowerCase();
+    
+    // Only count CONFIRMED bookings
+    if (normalizedStatus !== "confirmed" && normalizedStatus !== "completed") {
+      return;
+    }
+    
     const bookingDate = booking.createdAt?.toDate 
       ? booking.createdAt.toDate() 
       : booking.createdAt 
