@@ -69,10 +69,12 @@ export async function computeHostStats(): Promise<HostStats> {
   const eventsSnapshot = await getDocs(eventsQuery);
   const events = eventsSnapshot.docs.map(doc => {
     const data = doc.data();
+    // Extract manualPayoutPaid explicitly to ensure it's included
+    const manualPayoutPaid = typeof data.manualPayoutPaid === 'number' ? data.manualPayoutPaid : 0;
     return {
       id: doc.id,
       ...data,
-      manualPayoutPaid: (data.manualPayoutPaid as number | undefined) || 0,
+      manualPayoutPaid, // Explicitly set to ensure it's always present
     } as any; // Type assertion needed because Firestore data structure is dynamic
   });
 
@@ -101,9 +103,16 @@ export async function computeHostStats(): Promise<HostStats> {
   const timeStats = computeTimeBasedStats(bookings);
 
   // Compute payout stats (manual payouts from owner)
-  const totalPaidAmount = events.reduce((sum, event: any) => {
-    return sum + (event.manualPayoutPaid || 0);
-  }, 0);
+  // Sum manualPayoutPaid from all events for this organizer
+  // IMPORTANT: This aggregates all manual payouts set by owner in owner panel
+  let totalPaidAmount = 0;
+  events.forEach((event: any) => {
+    // Extract manualPayoutPaid - handle both number and undefined/null cases
+    const paidAmount = event.manualPayoutPaid;
+    if (typeof paidAmount === 'number' && !isNaN(paidAmount)) {
+      totalPaidAmount += paidAmount; // Include 0 values too, in case owner sets to 0
+    }
+  });
 
   return {
     ...eventStats,
