@@ -67,10 +67,14 @@ export async function computeHostStats(): Promise<HostStats> {
     where("hostUserId", "==", hostUserId)
   );
   const eventsSnapshot = await getDocs(eventsQuery);
-  const events = eventsSnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  const events = eventsSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      manualPayoutPaid: (data.manualPayoutPaid as number | undefined) || 0,
+    } as any; // Type assertion needed because Firestore data structure is dynamic
+  });
 
   // Compute event stats
   const eventStats = computeEventStats(events);
@@ -97,7 +101,7 @@ export async function computeHostStats(): Promise<HostStats> {
   const timeStats = computeTimeBasedStats(bookings);
 
   // Compute payout stats (manual payouts from owner)
-  const totalPaidAmount = events.reduce((sum, event) => {
+  const totalPaidAmount = events.reduce((sum, event: any) => {
     return sum + (event.manualPayoutPaid || 0);
   }, 0);
 
