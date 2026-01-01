@@ -62,6 +62,8 @@ export default function SuperAdminOrganizersPage() {
   const [editingPayout, setEditingPayout] = useState<{ eventId: string; organizerId: string } | null>(null);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutNote, setPayoutNote] = useState("");
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [selectedOrganizer, setSelectedOrganizer] = useState<OrganizerData | null>(null);
 
   // Owner email - single source of truth
   const OWNER_EMAIL = "movigoo4@gmail.com";
@@ -280,8 +282,81 @@ export default function SuperAdminOrganizersPage() {
     });
   };
 
-  // Update manual payout for an event (owner-only)
-  const handleUpdatePayout = async (eventId: string, organizerId: string) => {
+  // Calculate total paid amount for an organizer
+  const getTotalPaidAmount = (org: OrganizerData) => {
+    return org.events.reduce((sum, event) => sum + (event.manualPayoutPaid || 0), 0);
+  };
+
+  // Open payout modal for organizer
+  const openPayoutModal = (org: OrganizerData) => {
+    setSelectedOrganizer(org);
+    const totalPaid = getTotalPaidAmount(org);
+    setPayoutAmount(totalPaid.toString());
+    setPayoutNote(""); // Clear note for organizer-level edit
+    setShowPayoutModal(true);
+  };
+
+  // Close payout modal
+  const closePayoutModal = () => {
+    setShowPayoutModal(false);
+    setSelectedOrganizer(null);
+    setPayoutAmount("");
+    setPayoutNote("");
+  };
+
+  // Update manual payout for all events of an organizer (owner-only)
+  const handleUpdateOrganizerPayout = async () => {
+    if (!isOwner || !selectedOrganizer) {
+      toast.error("Unauthorized: Owner access only");
+      return;
+    }
+
+    const totalAmount = parseFloat(payoutAmount) || 0;
+    if (totalAmount < 0) {
+      toast.error("Payout amount cannot be negative");
+      return;
+    }
+
+    try {
+      // If organizer has events, distribute payout to the highest revenue event
+      // (Simple approach - owner can adjust per event later if needed)
+      if (selectedOrganizer.events.length > 0) {
+        // Sort events by revenue (highest first)
+        const sortedEvents = [...selectedOrganizer.events].sort((a, b) => b.revenue - a.revenue);
+        const mainEvent = sortedEvents[0];
+        
+        // Update the main event with the total payout
+        const eventRef = doc(db, "events", mainEvent.id);
+        await updateDoc(eventRef, {
+          manualPayoutPaid: totalAmount,
+          manualPayoutNote: payoutNote.trim() || null,
+          manualPayoutPaidAt: totalAmount > 0 ? serverTimestamp() : null,
+          updatedAt: serverTimestamp(),
+        });
+
+        // Set other events to 0 (or owner can manually adjust later)
+        for (let i = 1; i < sortedEvents.length; i++) {
+          const eventRef = doc(db, "events", sortedEvents[i].id);
+          await updateDoc(eventRef, {
+            manualPayoutPaid: 0,
+            manualPayoutNote: null,
+            manualPayoutPaidAt: null,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      toast.success("Payout updated successfully");
+      closePayoutModal();
+      await loadOrganizers(); // Refresh data
+    } catch (error) {
+      console.error("Error updating payout:", error);
+      toast.error("Failed to update payout");
+    }
+  };
+
+  // Update manual payout for an event (owner-only) - from events table
+  const handleUpdateEventPayout = async (eventId: string, organizerId: string) => {
     if (!isOwner) {
       toast.error("Unauthorized: Owner access only");
       return;
@@ -675,10 +750,21 @@ export default function SuperAdminOrganizersPage() {
 
                                 {/* Payout Summary */}
                                 <div className="bg-white rounded-lg p-4 shadow-sm">
-                                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                    <TrendingUp size={16} className="text-purple-600" />
-                                    Payout Summary
-                                  </h4>
+                                  <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                      <TrendingUp size={16} className="text-purple-600" />
+                                      Payout Summary
+                                    </h4>
+                                    {isOwner && (
+                                      <button
+                                        onClick={() => openPayoutModal(org)}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
+                                      >
+                                        <Edit2 size={14} />
+                                        Edit Payout
+                                      </button>
+                                    )}
+                                  </div>
                                   <div className="space-y-2 text-sm">
                                     <div>
                                       <span className="text-gray-500">Total Revenue:</span>
@@ -691,6 +777,14 @@ export default function SuperAdminOrganizersPage() {
                                     <div className="pt-2 border-t">
                                       <span className="text-gray-500">Payout Eligible:</span>
                                       <span className="ml-2 font-bold text-green-600">{formatCurrency(org.payoutEligible)}</span>
+                                    </div>
+                                    <div className="pt-2 border-t">
+                                      <span className="text-gray-500">Amount Paid:</span>
+                                      <span className={`ml-2 font-bold ${
+                                        getTotalPaidAmount(org) > 0 ? "text-green-600" : "text-gray-400"
+                                      }`}>
+                                        {formatCurrency(getTotalPaidAmount(org))}
+                                      </span>
                                     </div>
                                     <div>
                                       <span className="text-gray-500">Status:</span>
@@ -781,7 +875,7 @@ export default function SuperAdminOrganizersPage() {
                                                 {isEditing ? (
                                                   <div className="flex items-center gap-1">
                                                     <button
-                                                      onClick={() => handleUpdatePayout(event.id, org.id)}
+                                                      onClick={() => handleUpdateEventPayout(event.id, org.id)}
                                                       className="p-1 text-green-600 hover:bg-green-50 rounded"
                                                       title="Save"
                                                     >
@@ -839,6 +933,79 @@ export default function SuperAdminOrganizersPage() {
           </div>
         </div>
       </div>
+
+      {/* Payout Edit Modal */}
+      {showPayoutModal && selectedOrganizer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Payout</h3>
+              <button
+                onClick={closePayoutModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Organizer
+                </label>
+                <p className="text-sm text-gray-900">{selectedOrganizer.name}</p>
+                <p className="text-xs text-gray-500">{selectedOrganizer.email}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Paid Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Total payout eligible: {formatCurrency(selectedOrganizer.payoutEligible)}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Note (Optional)
+                </label>
+                <textarea
+                  value={payoutNote}
+                  onChange={(e) => setPayoutNote(e.target.value)}
+                  placeholder="Add a note about this payout..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={closePayoutModal}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateOrganizerPayout}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                >
+                  Save Payout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
