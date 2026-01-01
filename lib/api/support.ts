@@ -81,10 +81,10 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
   if (!user) throw new Error("User not authenticated");
 
   const ticketsRef = collection(db, "supportTickets");
+  // Remove orderBy to avoid index requirement - sort client-side instead
   const q = query(
     ticketsRef,
-    where("userId", "==", user.uid),
-    orderBy("updatedAt", "desc")
+    where("userId", "==", user.uid)
   );
 
   const snapshot = await getDocs(q);
@@ -107,6 +107,13 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
       updatedAt: data.updatedAt,
     });
   }
+
+  // Sort by updatedAt descending (client-side to avoid index requirement)
+  tickets.sort((a, b) => {
+    const aTime = a.updatedAt?.seconds || a.updatedAt?._seconds || 0;
+    const bTime = b.updatedAt?.seconds || b.updatedAt?._seconds || 0;
+    return bTime - aTime;
+  });
 
   return tickets;
 }
