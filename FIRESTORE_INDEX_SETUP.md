@@ -26,6 +26,15 @@ The following composite indexes are required for efficient querying:
 
 **Used by:** Organizer dashboard event queries
 
+### 3. Support Tickets Collection - UserId + UpdatedAt
+
+**Collection:** `supportTickets`  
+**Fields:**
+- `userId` (ASCENDING)
+- `updatedAt` (DESCENDING)
+
+**Used by:** Organizer Support panel to fetch user's tickets ordered by most recent
+
 ## Setup Methods
 
 ### Method 1: Using Firebase Console (Recommended)
@@ -42,6 +51,12 @@ The following composite indexes are required for efficient querying:
      - `createdAt` → Descending
 6. Click **Create**
 7. Repeat for the second index (using `hostUserId` instead of `organizerId`)
+8. Repeat for the support tickets index:
+   - **Collection ID:** `supportTickets`
+   - **Fields to index:**
+     - `userId` → Ascending
+     - `updatedAt` → Descending
+   - Click **Create**
 
 ### Method 2: Using Firebase CLI
 
@@ -68,9 +83,12 @@ When Firestore throws an index error, it provides a direct link to create the in
 After creating the indexes:
 
 1. Check Firebase Console → Firestore → Indexes
-2. Verify both indexes show status: **Enabled**
-3. Test the queries that were failing
-4. The error should no longer appear
+2. Verify all indexes show status: **Enabled**
+3. Test the queries that were failing:
+   - Owner panel organizer queries
+   - Organizer dashboard queries
+   - Support tickets panel queries
+4. The errors should no longer appear
 
 ## Notes
 
