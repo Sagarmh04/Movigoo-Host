@@ -1,17 +1,45 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CalendarCheck, IndianRupee, Users, Ticket, TrendingUp, BarChart3, Loader2 } from "lucide-react";
+import { CalendarCheck, IndianRupee, Users, Ticket, TrendingUp, BarChart3, Loader2, DollarSign } from "lucide-react";
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState<HostStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Wait for auth state to be ready
   useEffect(() => {
-    loadStats();
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  // Load stats only after auth is ready
+  useEffect(() => {
+    // Don't call API while auth is still loading
+    if (authLoading) {
+      return;
+    }
+
+    // If auth is done loading and no user, show error
+    if (!user) {
+      setError("Please login to view your dashboard");
+      setLoading(false);
+      return;
+    }
+
+    // Auth is ready and user exists - load stats
+    loadStats();
+  }, [authLoading, user]);
 
   const loadStats = async () => {
     try {
@@ -21,7 +49,12 @@ export default function DashboardOverview() {
       setStats(computedStats);
     } catch (err: any) {
       console.error("Error loading stats:", err);
-      setError(err.message || "Failed to load statistics");
+      // Only show error if it's not an auth error (auth errors are handled above)
+      if (err.message !== "User not authenticated") {
+        setError(err.message || "Failed to load statistics");
+      } else {
+        setError("Please login to view your dashboard");
+      }
     } finally {
       setLoading(false);
     }
@@ -35,7 +68,8 @@ export default function DashboardOverview() {
     }).format(amount);
   };
 
-  if (loading) {
+  // Show loader while auth is loading OR data is loading
+  if (authLoading || loading) {
     return (
       <div className="space-y-6">
         <div>
@@ -51,7 +85,9 @@ export default function DashboardOverview() {
     );
   }
 
-  if (error) {
+  // Only show error if auth is done loading AND there's an error
+  // Don't show error while auth is still loading (prevents false "User not authenticated" on first load)
+  if (error && !authLoading) {
     return (
       <div className="space-y-6">
         <div>
@@ -62,12 +98,14 @@ export default function DashboardOverview() {
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800">Error: {error}</p>
-          <button
-            onClick={loadStats}
-            className="mt-2 text-red-600 hover:text-red-800 underline"
-          >
-            Retry
-          </button>
+          {user && (
+            <button
+              onClick={loadStats}
+              className="mt-2 text-red-600 hover:text-red-800 underline"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     );
@@ -92,6 +130,7 @@ export default function DashboardOverview() {
     occupancyRate: 0,
     averageTicketPrice: 0,
     revenueByEvent: [],
+    totalPaidAmount: 0,
     averageBookingsPerEvent: 0,
     mostPopularEvent: null,
     leastPopularEvent: null,
@@ -119,7 +158,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Primary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
@@ -146,6 +185,27 @@ export default function DashboardOverview() {
               </p>
             </div>
             <IndianRupee className="h-8 w-8 text-green-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-500 text-sm">Amount Paid</p>
+              <h2 className={`text-3xl font-bold mt-2 ${
+                displayStats.totalPaidAmount > 0 ? "text-green-600" : "text-gray-400"
+              }`}>
+                {formatCurrency(displayStats.totalPaidAmount || 0)}
+              </h2>
+              <p className="text-xs text-gray-400 mt-1">
+                {displayStats.totalPaidAmount > 0 ? (
+                  <span className="text-green-600 font-medium">✓ Paid</span>
+                ) : (
+                  <span className="text-orange-600 font-medium">Pending Manual Payout</span>
+                )}
+              </p>
+            </div>
+            <DollarSign className="h-8 w-8 text-blue-500" />
           </div>
         </div>
 

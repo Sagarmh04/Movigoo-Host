@@ -33,6 +33,9 @@ export interface HostStats {
   averageTicketPrice: number;
   revenueByEvent: Array<{ eventId: string; eventTitle: string; revenue: number }>;
   
+  // Payout Stats (manual payouts from owner)
+  totalPaidAmount: number; // Sum of manualPayoutPaid from all events
+  
   // Performance Stats
   averageBookingsPerEvent: number;
   mostPopularEvent: { eventId: string; title: string; bookings: number } | null;
@@ -58,7 +61,7 @@ export async function computeHostStats(): Promise<HostStats> {
   // In this app, authenticated users are host users
   const hostUserId = user.uid;
 
-  // Fetch all events for this host
+  // Fetch all events for this host (bookings are in subcollections: events/{eventId}/bookings)
   const eventsQuery = query(
     collection(db, "events"),
     where("hostUserId", "==", hostUserId)
@@ -75,7 +78,7 @@ export async function computeHostStats(): Promise<HostStats> {
   // Fetch bookings for all events
   const bookings = await fetchAllBookings(events.map(e => e.id));
   
-  // Compute booking stats
+  // Compute booking stats (only counts CONFIRMED bookings)
   const bookingStats = computeBookingStats(bookings, events);
   
   // Compute customer stats
@@ -93,12 +96,18 @@ export async function computeHostStats(): Promise<HostStats> {
   // Compute time-based stats
   const timeStats = computeTimeBasedStats(bookings);
 
+  // Compute payout stats (manual payouts from owner)
+  const totalPaidAmount = events.reduce((sum, event) => {
+    return sum + (event.manualPayoutPaid || 0);
+  }, 0);
+
   return {
     ...eventStats,
     ...bookingStats,
     ...customerStats,
     ...ticketStats,
     ...revenueStats,
+    totalPaidAmount,
     ...performanceStats,
     ...timeStats,
   };
@@ -106,21 +115,32 @@ export async function computeHostStats(): Promise<HostStats> {
 
 /**
  * Fetch all bookings for given event IDs
+ * Bookings are stored in subcollections: events/{eventId}/bookings/{bookingId}
+ * Note: We fetch all bookings and filter by status in compute functions to handle case variations
  */
 async function fetchAllBookings(eventIds: string[]): Promise<any[]> {
   const allBookings: any[] = [];
   
+  if (eventIds.length === 0) {
+    return allBookings;
+  }
+  
   for (const eventId of eventIds) {
     try {
+      // Fetch all bookings from this event's subcollection
       const bookingsQuery = query(
         collection(db, "events", eventId, "bookings")
       );
       const bookingsSnapshot = await getDocs(bookingsQuery);
-      const eventBookings = bookingsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        eventId,
-        ...doc.data()
-      }));
+      const eventBookings = bookingsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          eventId,
+          ...data
+        };
+      });
+      
       allBookings.push(...eventBookings);
     } catch (error) {
       console.error(`Error fetching bookings for event ${eventId}:`, error);
@@ -168,7 +188,8 @@ function computeEventStats(events: any[]) {
 
 /**
  * Compute booking-related statistics
- * IMPORTANT: Revenue and tickets sold only count CONFIRMED bookings
+ * IMPORTANT: Only counts CONFIRMED bookings for revenue, tickets sold, and total bookings display
+ * Status matching is case-insensitive to handle "confirmed", "CONFIRMED", "Confirmed", "completed", etc.
  */
 function computeBookingStats(bookings: any[], events: any[]) {
   const totalBookings = bookings.length;
@@ -181,17 +202,26 @@ function computeBookingStats(bookings: any[], events: any[]) {
   bookings.forEach(booking => {
     const ticketCount = booking.ticketCount || booking.quantity || 1;
     const amount = booking.amount || booking.total || 0;
-    const status = booking.status || "pending";
-    const normalizedStatus = status.toLowerCase();
+    const status = booking.status;
     
-    if (status === "pending") {
-      pendingBookings++;
-    } else if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
+    // Skip bookings without status field
+    if (!status) {
+      return;
+    }
+    
+    // Normalize status for case-insensitive comparison (handles "confirmed", "CONFIRMED", "Confirmed", etc.)
+    const normalizedStatus = typeof status === 'string' ? status.toLowerCase().trim() : String(status).toLowerCase().trim();
+    
+    // Count confirmed bookings (handles "confirmed" and "completed" statuses)
+    if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
       confirmedBookings++;
       // Only count revenue and tickets for CONFIRMED bookings
       totalTicketsSold += ticketCount;
       totalRevenue += amount;
+    } else if (normalizedStatus === "pending") {
+      pendingBookings++;
     }
+    // Ignore cancelled, failed, refunded, or unknown statuses
   });
 
   return {
@@ -449,6 +479,7 @@ function getEmptyStats(): HostStats {
     occupancyRate: 0,
     averageTicketPrice: 0,
     revenueByEvent: [],
+    totalPaidAmount: 0,
     averageBookingsPerEvent: 0,
     mostPopularEvent: null,
     leastPopularEvent: null,

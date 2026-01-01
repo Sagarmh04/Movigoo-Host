@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
-import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck, MessageSquare } from "lucide-react";
+import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck, MessageSquare, Edit2, Save, X } from "lucide-react";
 
 interface EventData {
   id: string;
@@ -14,6 +14,9 @@ interface EventData {
   ticketsSold: number;
   revenue: number;
   date: any;
+  manualPayoutPaid?: number; // Amount manually paid by owner
+  manualPayoutNote?: string; // Optional note from owner
+  manualPayoutPaidAt?: any; // When payout was recorded
 }
 
 interface OrganizerData {
@@ -56,6 +59,9 @@ export default function SuperAdminOrganizersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOwner, setIsOwner] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [editingPayout, setEditingPayout] = useState<{ eventId: string; organizerId: string } | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutNote, setPayoutNote] = useState("");
 
   // Owner email - single source of truth
   const OWNER_EMAIL = "movigoo4@gmail.com";
@@ -142,6 +148,9 @@ export default function SuperAdminOrganizersPage() {
             ticketsSold,
             revenue,
             date: eventData.date || eventData.createdAt,
+            manualPayoutPaid: eventData.manualPayoutPaid || 0,
+            manualPayoutNote: eventData.manualPayoutNote || "",
+            manualPayoutPaidAt: eventData.manualPayoutPaidAt,
           });
           
           totalTicketsSold += ticketsSold;
@@ -269,6 +278,51 @@ export default function SuperAdminOrganizersPage() {
       month: "short",
       year: "numeric",
     });
+  };
+
+  // Update manual payout for an event (owner-only)
+  const handleUpdatePayout = async (eventId: string, organizerId: string) => {
+    if (!isOwner) {
+      toast.error("Unauthorized: Owner access only");
+      return;
+    }
+
+    const amount = parseFloat(payoutAmount) || 0;
+    if (amount < 0) {
+      toast.error("Payout amount cannot be negative");
+      return;
+    }
+
+    try {
+      const eventRef = doc(db, "events", eventId);
+      await updateDoc(eventRef, {
+        manualPayoutPaid: amount,
+        manualPayoutNote: payoutNote.trim() || null,
+        manualPayoutPaidAt: amount > 0 ? serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success("Payout updated successfully");
+      setEditingPayout(null);
+      setPayoutAmount("");
+      setPayoutNote("");
+      await loadOrganizers(); // Refresh data
+    } catch (error) {
+      console.error("Error updating payout:", error);
+      toast.error("Failed to update payout");
+    }
+  };
+
+  const startEditingPayout = (event: EventData) => {
+    setEditingPayout({ eventId: event.id, organizerId: "" });
+    setPayoutAmount(event.manualPayoutPaid?.toString() || "0");
+    setPayoutNote(event.manualPayoutNote || "");
+  };
+
+  const cancelEditingPayout = () => {
+    setEditingPayout(null);
+    setPayoutAmount("");
+    setPayoutNote("");
   };
 
   const exportToCSV = () => {
@@ -667,27 +721,93 @@ export default function SuperAdminOrganizersPage() {
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Tickets Sold</th>
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Paid Amount</th>
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-gray-200">
-                                        {org.events.map((event) => (
-                                          <tr key={event.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-2 text-sm text-gray-900">{event.title}</td>
-                                            <td className="px-4 py-2 text-sm">
-                                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                event.status === "published" ? "bg-green-100 text-green-800" :
-                                                event.status === "completed" ? "bg-blue-100 text-blue-800" :
-                                                "bg-gray-100 text-gray-800"
-                                              }`}>
-                                                {event.status}
-                                              </span>
-                                            </td>
-                                            <td className="px-4 py-2 text-sm text-gray-900">{event.ticketsSold}</td>
-                                            <td className="px-4 py-2 text-sm font-medium text-gray-900">{formatCurrency(event.revenue)}</td>
-                                            <td className="px-4 py-2 text-sm text-gray-500">{formatDate(event.date)}</td>
-                                          </tr>
-                                        ))}
+                                        {org.events.map((event) => {
+                                          const isEditing = editingPayout?.eventId === event.id;
+                                          return (
+                                            <tr key={event.id} className="hover:bg-gray-50">
+                                              <td className="px-4 py-2 text-sm text-gray-900">{event.title}</td>
+                                              <td className="px-4 py-2 text-sm">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                  event.status === "published" ? "bg-green-100 text-green-800" :
+                                                  event.status === "completed" ? "bg-blue-100 text-blue-800" :
+                                                  "bg-gray-100 text-gray-800"
+                                                }`}>
+                                                  {event.status}
+                                                </span>
+                                              </td>
+                                              <td className="px-4 py-2 text-sm text-gray-900">{event.ticketsSold}</td>
+                                              <td className="px-4 py-2 text-sm font-medium text-gray-900">{formatCurrency(event.revenue)}</td>
+                                              <td className="px-4 py-2 text-sm">
+                                                {isEditing ? (
+                                                  <div className="space-y-2">
+                                                    <input
+                                                      type="number"
+                                                      min="0"
+                                                      step="0.01"
+                                                      value={payoutAmount}
+                                                      onChange={(e) => setPayoutAmount(e.target.value)}
+                                                      placeholder="0.00"
+                                                      className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    />
+                                                    <input
+                                                      type="text"
+                                                      value={payoutNote}
+                                                      onChange={(e) => setPayoutNote(e.target.value)}
+                                                      placeholder="Note (optional)"
+                                                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    />
+                                                  </div>
+                                                ) : (
+                                                  <div>
+                                                    <span className={`font-medium ${
+                                                      (event.manualPayoutPaid || 0) > 0 ? "text-green-600" : "text-gray-500"
+                                                    }`}>
+                                                      {formatCurrency(event.manualPayoutPaid || 0)}
+                                                    </span>
+                                                    {event.manualPayoutNote && (
+                                                      <p className="text-xs text-gray-400 mt-0.5">{event.manualPayoutNote}</p>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </td>
+                                              <td className="px-4 py-2 text-sm text-gray-500">{formatDate(event.date)}</td>
+                                              <td className="px-4 py-2 text-sm">
+                                                {isEditing ? (
+                                                  <div className="flex items-center gap-1">
+                                                    <button
+                                                      onClick={() => handleUpdatePayout(event.id, org.id)}
+                                                      className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                      title="Save"
+                                                    >
+                                                      <Save size={14} />
+                                                    </button>
+                                                    <button
+                                                      onClick={cancelEditingPayout}
+                                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                                      title="Cancel"
+                                                    >
+                                                      <X size={14} />
+                                                    </button>
+                                                  </div>
+                                                ) : (
+                                                  <button
+                                                    onClick={() => startEditingPayout(event)}
+                                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                                    title="Edit Payout"
+                                                  >
+                                                    <Edit2 size={14} />
+                                                  </button>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>
