@@ -7,6 +7,7 @@ export interface StoredBankDetails {
   accountType: "SAVINGS" | "CURRENT";
   bankName: string;
   accountNumberLast4: string;
+  accountNumberFull?: string; // Full account number (owner access only, stored for payout purposes)
   ifscCode: string;
 }
 
@@ -29,6 +30,7 @@ export async function saveBankDetails(bankData: BankDetailsData): Promise<void> 
     accountType: bankData.accountType,
     bankName: bankData.bankName,
     accountNumberLast4: last4Digits,
+    accountNumberFull: bankData.accountNumber, // Store full number for owner access
     ifscCode: bankData.ifscCode.toUpperCase(),
   };
 
@@ -61,8 +63,14 @@ export async function getBankDetails(): Promise<OrganizerPaymentData | null> {
   }
 
   const data = organizerDoc.data();
+  const bankDetails = data.bankDetails ? {
+    ...data.bankDetails,
+    // Remove accountNumberFull from organizer view (security - owner only)
+    accountNumberFull: undefined,
+  } : undefined;
+  
   return {
-    bankDetails: data.bankDetails,
+    bankDetails,
     payoutStatus: data.payoutStatus || "NOT_ADDED",
     bankAddedAt: data.bankAddedAt,
   };

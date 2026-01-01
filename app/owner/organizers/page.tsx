@@ -35,6 +35,7 @@ interface OrganizerData {
     accountType: string;
     bankName: string;
     accountNumberLast4: string;
+    accountNumberFull?: string; // Full account number (owner access only)
     ifscCode: string;
   };
   payoutStatus: string;
@@ -150,7 +151,7 @@ export default function SuperAdminOrganizersPage() {
             ticketsSold,
             revenue,
             date: eventData.date || eventData.createdAt,
-            manualPayoutPaid: eventData.manualPayoutPaid || 0,
+            manualPayoutPaid: typeof eventData.manualPayoutPaid === 'number' ? eventData.manualPayoutPaid : 0,
             manualPayoutNote: eventData.manualPayoutNote || "",
             manualPayoutPaidAt: eventData.manualPayoutPaidAt,
           });
@@ -283,8 +284,16 @@ export default function SuperAdminOrganizersPage() {
   };
 
   // Calculate total paid amount for an organizer
+  // Aggregates manualPayoutPaid from all events
   const getTotalPaidAmount = (org: OrganizerData) => {
-    return org.events.reduce((sum, event) => sum + (event.manualPayoutPaid || 0), 0);
+    let total = 0;
+    org.events.forEach((event) => {
+      const paidAmount = typeof event.manualPayoutPaid === 'number' ? event.manualPayoutPaid : 0;
+      if (!isNaN(paidAmount)) {
+        total += paidAmount;
+      }
+    });
+    return total;
   };
 
   // Open payout modal for organizer
@@ -731,8 +740,11 @@ export default function SuperAdminOrganizersPage() {
                                       <div>
                                         <span className="text-gray-500">Account:</span>
                                         <span className="ml-2 font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-900">
-                                          XXXXXX{org.bankDetails.accountNumberLast4}
+                                          {org.bankDetails.accountNumberFull || `XXXXXX${org.bankDetails.accountNumberLast4}`}
                                         </span>
+                                        {org.bankDetails.accountNumberFull && (
+                                          <p className="text-xs text-gray-400 mt-0.5">Full account number (owner view only)</p>
+                                        )}
                                       </div>
                                       <div>
                                         <span className="text-gray-500">Type:</span>
@@ -787,10 +799,20 @@ export default function SuperAdminOrganizersPage() {
                                       </span>
                                     </div>
                                     <div>
-                                      <span className="text-gray-500">Status:</span>
+                                      <span className="text-gray-500">Payout Status:</span>
+                                      <span className="ml-2">
+                                        {getTotalPaidAmount(org) > 0 ? (
+                                          <span className="text-green-600 font-medium">✓ Paid</span>
+                                        ) : (
+                                          <span className="text-orange-600 font-medium">Pending Manual Payout</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-500">Ready Status:</span>
                                       <span className="ml-2">
                                         {isPayoutReady ? (
-                                          <span className="text-green-600 font-medium">✓ Ready for Payout</span>
+                                          <span className="text-blue-600 font-medium">✓ Ready (KYC + Bank OK)</span>
                                         ) : (
                                           <span className="text-orange-600 font-medium">⚠ Pending KYC/Bank</span>
                                         )}
