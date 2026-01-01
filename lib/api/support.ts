@@ -216,10 +216,11 @@ export async function replyToTicket(
     updatedAt: serverTimestamp(),
   });
 
-  // Send email notification
-  if (sender === "SUPPORT") {
-    await sendSupportReplyEmail(ticketData.ticketId, ticketData.userEmail, message);
+  // Send email notification to owner (only when user replies)
+  if (sender === "USER") {
+    await sendUserReplyEmail(ticketData.ticketId, ticketData, message);
   }
+  // Support replies don't need email (owner already knows)
 }
 
 // Update ticket status
@@ -312,18 +313,31 @@ async function sendSupportReplyEmail(
   userEmail: string,
   message: string
 ): Promise<void> {
+  // Support replies don't need email notification (owner sent it)
+  // This function is kept for compatibility but does nothing
+  // Email notifications are owner-only
+}
+
+async function sendUserReplyEmail(
+  ticketId: string,
+  ticketData: any,
+  message: string
+): Promise<void> {
   try {
     await fetch("/api/support/notify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: "SUPPORT_REPLY",
-        ticketId,
-        userEmail,
+        type: "USER_REPLY",
+        ticketId: ticketData.ticketId,
+        userName: ticketData.userName,
+        userEmail: ticketData.userEmail,
+        subject: ticketData.subject,
         message,
       }),
     });
   } catch (error) {
-    console.error("Failed to send support reply email:", error);
+    console.error("Failed to send user reply email:", error);
+    // Don't throw - email failure should not block message saving
   }
 }

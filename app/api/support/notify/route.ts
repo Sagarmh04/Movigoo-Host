@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const SUPPORT_EMAIL = "movigootech@gmail.com";
+const OWNER_EMAIL = "movigoo4@gmail.com";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
     const { type, ticketId, userName, userEmail, category, subject, description, message } = body;
 
     if (type === "TICKET_CREATED") {
-      // Send email to support team
-      const emailSubject = `New Support Ticket: ${ticketId} - ${subject}`;
+      // Send email to owner when ticket is created
+      const emailSubject = `New Support Ticket Created: ${ticketId} - ${subject}`;
       const emailBody = `
 New support ticket created:
 
@@ -23,39 +23,45 @@ User Details:
 Name: ${userName}
 Email: ${userEmail}
 
-Description:
+Message:
 ${description}
 
 ---
-Reply to this ticket at: https://corporate.movigoo.in (Support section)
+Reply to this ticket at: https://corporate.movigoo.in/owner/organizers (Support section)
       `.trim();
 
-      await sendEmail(SUPPORT_EMAIL, emailSubject, emailBody);
+      await sendEmail(OWNER_EMAIL, emailSubject, emailBody);
 
-      return NextResponse.json({ success: true, message: "Support team notified" });
-    } else if (type === "SUPPORT_REPLY") {
-      // Send email to user
-      const emailSubject = `Support Reply: ${ticketId}`;
+      return NextResponse.json({ success: true, message: "Owner notified" });
+    } else if (type === "USER_REPLY") {
+      // Send email to owner when user replies
+      const emailSubject = `New Reply on Support Ticket: ${ticketId}`;
       const emailBody = `
-You have received a reply to your support ticket ${ticketId}:
+User has replied to support ticket ${ticketId}:
 
+Ticket: ${subject}
+User: ${userName} (${userEmail})
+
+User's Reply:
 ${message}
 
 ---
-View full conversation at: https://corporate.movigoo.in (Support section)
-
-Best regards,
-Movigoo Support Team
+View full conversation at: https://corporate.movigoo.in/owner/organizers (Support section)
       `.trim();
 
-      await sendEmail(userEmail, emailSubject, emailBody);
+      await sendEmail(OWNER_EMAIL, emailSubject, emailBody);
 
-      return NextResponse.json({ success: true, message: "User notified" });
+      return NextResponse.json({ success: true, message: "Owner notified" });
+    } else if (type === "SUPPORT_REPLY") {
+      // Support replies - owner already knows (they sent it), so no email needed
+      // This type is kept for compatibility but won't send emails
+      return NextResponse.json({ success: true, message: "No notification needed" });
     }
 
     return NextResponse.json({ error: "Invalid notification type" }, { status: 400 });
   } catch (error: any) {
     console.error("Email notification error:", error);
+    // Don't fail the request - email failures should not break ticket creation
     return NextResponse.json(
       { error: "Failed to send notification", message: error.message },
       { status: 500 }
