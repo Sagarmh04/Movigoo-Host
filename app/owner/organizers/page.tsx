@@ -123,11 +123,11 @@ export default function SuperAdminOrganizersPage() {
 
       const organizersData: OrganizerData[] = [];
 
-      for (const doc of snapshot.docs) {
-        const data = doc.data();
+      for (const organizerDoc of snapshot.docs) {
+        const data = organizerDoc.data();
         
         // Get user profile data (use direct document access instead of query)
-        const userDocRef = doc(db, "users", doc.id);
+        const userDocRef = doc(db, "users", organizerDoc.id);
         const userDocSnap = await getDoc(userDocRef);
         
         let userProfile: any = {};
@@ -137,7 +137,7 @@ export default function SuperAdminOrganizersPage() {
 
         // Get organizer's events
         const eventsRef = collection(db, "events");
-        const eventsQuery = query(eventsRef, where("organizerId", "==", doc.id));
+        const eventsQuery = query(eventsRef, where("organizerId", "==", organizerDoc.id));
         const eventsSnapshot = await getDocs(eventsQuery);
         
         const events: EventData[] = [];
@@ -166,7 +166,7 @@ export default function SuperAdminOrganizersPage() {
         });
 
         organizersData.push({
-          id: doc.id,
+          id: organizerDoc.id,
           name: userProfile.name || data.name || "N/A",
           email: userProfile.email || data.email || "N/A",
           phone: userProfile.phone || data.phone || "N/A",
