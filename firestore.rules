@@ -197,6 +197,22 @@ service cloud.firestore {
     }
     
     // ============================================
+    // HOST ANALYTICS COLLECTION
+    // ============================================
+    match /host_analytics/{hostId} {
+      // Read access:
+      // - Organizers can read their own analytics (hostId matches their uid)
+      // - Owner can read all analytics
+      allow read: if isAuthenticated() && (
+        request.auth.uid == hostId ||
+        isOwner()
+      );
+      
+      // Write access: Backend/Cloud Functions only (no client writes)
+      allow write: if false;
+    }
+    
+    // ============================================
     // DEFAULT DENY (Security by default)
     // ============================================
     // All other collections/documents are denied by default

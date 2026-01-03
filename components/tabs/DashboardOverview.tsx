@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CalendarCheck, IndianRupee, Users, Ticket, TrendingUp, BarChart3, Loader2, DollarSign } from "lucide-react";
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
+import { getCurrentHostAnalytics } from "@/lib/utils/analytics";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 
@@ -45,8 +46,27 @@ export default function DashboardOverview() {
     try {
       setLoading(true);
       setError(null);
+      
+      // Load analytics from host_analytics collection (analytics collections ONLY)
+      let analyticsData = null;
+      try {
+        analyticsData = await getCurrentHostAnalytics();
+      } catch (analyticsError) {
+        console.warn("Could not load analytics:", analyticsError);
+        // Continue with computed stats even if analytics fails
+      }
+      
+      // Load computed stats for other metrics (events, bookings, etc.)
       const computedStats = await computeHostStats();
-      setStats(computedStats);
+      
+      // Override totalTicketsSold with analytics data (if available)
+      // If analytics doc doesn't exist, show 0 instead of computed value
+      const finalStats: HostStats = {
+        ...computedStats,
+        totalTicketsSold: analyticsData?.totalTicketsSold ?? 0,
+      };
+      
+      setStats(finalStats);
     } catch (err: any) {
       console.error("Error loading stats:", err);
       // Only show error if it's not an auth error (auth errors are handled above)
