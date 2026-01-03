@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, query, where, doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { toast } from "sonner";
 import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck, MessageSquare, Edit2, Save, X } from "lucide-react";
 
@@ -55,6 +56,7 @@ interface OrganizerData {
 
 export default function SuperAdminOrganizersPage() {
   const router = useRouter();
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [organizers, setOrganizers] = useState<OrganizerData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
