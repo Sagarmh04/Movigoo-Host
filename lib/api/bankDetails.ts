@@ -53,27 +53,33 @@ export async function getBankDetails(): Promise<OrganizerPaymentData | null> {
     return null;
   }
 
-  const organizerRef = doc(db, "organizers", user.uid);
-  const organizerDoc = await getDoc(organizerRef);
+  try {
+    const organizerRef = doc(db, "organizers", user.uid);
+    const organizerDoc = await getDoc(organizerRef);
 
-  if (!organizerDoc.exists()) {
+    if (!organizerDoc.exists()) {
+      return {
+        payoutStatus: "NOT_ADDED",
+      };
+    }
+
+    const data = organizerDoc.data();
+    const bankDetails = data.bankDetails ? {
+      ...data.bankDetails,
+      // Remove accountNumberFull from organizer view (security - owner only)
+      accountNumberFull: undefined,
+    } : undefined;
+    
     return {
-      payoutStatus: "NOT_ADDED",
+      bankDetails,
+      payoutStatus: data.payoutStatus || "NOT_ADDED",
+      bankAddedAt: data.bankAddedAt,
     };
+  } catch (error) {
+    console.error("Error fetching bank details:", error);
+    // Return null on error to indicate failure
+    return null;
   }
-
-  const data = organizerDoc.data();
-  const bankDetails = data.bankDetails ? {
-    ...data.bankDetails,
-    // Remove accountNumberFull from organizer view (security - owner only)
-    accountNumberFull: undefined,
-  } : undefined;
-  
-  return {
-    bankDetails,
-    payoutStatus: data.payoutStatus || "NOT_ADDED",
-    bankAddedAt: data.bankAddedAt,
-  };
 }
 
 export async function updateBankDetails(bankData: BankDetailsData): Promise<void> {

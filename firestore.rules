@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Check if user is owner (movigoo4@gmail.com)
+    function isOwner() {
+      return request.auth != null && request.auth.token.email == 'movigoo4@gmail.com';
+    }
+    
+    // Helper function: Check if user is support staff
+    function isSupport() {
+      return request.auth != null && 
+             (request.auth.token.email == 'movigootech@gmail.com' || 
+              request.auth.token.email == 'movigoo4@gmail.com');
+    }
+    
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Users can write/update their own profile
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // ============================================
+    // EVENTS COLLECTION
+    // ============================================
+    match /events/{eventId} {
+      // Read access:
+      // - Organizers can read events where hostUserId or organizerId matches their uid
+      // - Owner can read all events
+      allow read: if isAuthenticated() && (
+        resource.data.hostUserId == request.auth.uid ||
+        resource.data.organizerId == request.auth.uid ||
+        isOwner()
+      );
+      
+      // Create access:
+      // - Authenticated users can create events (hostUserId will be set by backend)
+      allow create: if isAuthenticated();
+      
+      // Update access:
+      // - Organizers can update their own events (where hostUserId or organizerId matches)
+      // - Owner can update manualPayoutPaid, manualPayoutNote, manualPayoutPaidAt, updatedAt fields on any event
+      allow update: if isAuthenticated() && (
+        // Organizer can update their own events
+        (resource.data.hostUserId == request.auth.uid || resource.data.organizerId == request.auth.uid) ||
+        // Owner can update payout fields on any event
+        (isOwner() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['manualPayoutPaid', 'manualPayoutNote', 'manualPayoutPaidAt', 'updatedAt']))
+      );
+      
+      // Delete access:
+      // - Organizers can delete their own events
+      allow delete: if isAuthenticated() && (
+        resource.data.hostUserId == request.auth.uid ||
+        resource.data.organizerId == request.auth.uid
+      );
+      
+      // ============================================
+      // BOOKINGS SUBCOLLECTION (events/{eventId}/bookings)
+      // ============================================
+      match /bookings/{bookingId} {
+        // Read access:
+        // - Organizers can read bookings for their events
+        // - Owner can read all bookings
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
+          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid ||
+          isOwner()
+        );
+        
+        // Create access:
+        // - Backend/API creates bookings (not from client directly)
+        // Allow authenticated users for now (backend should handle validation)
+        allow create: if isAuthenticated();
+        
+        // Update access:
+        // - Organizers can update bookings for their events
+        // - Owner can update any booking
+        allow update: if isAuthenticated() && (
+          get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
+          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid ||
+          isOwner()
+        );
+        
+        // Delete access:
+        // - Only owner can delete bookings (or backend)
+        allow delete: if isOwner();
+      }
+    }
+    
+    // ============================================
+    // ORGANIZERS COLLECTION
+    // ============================================
+    match /organizers/{organizerId} {
+      // Read access:
+      // - Organizers can read their own document
+      // - Owner can read all organizer documents
+      allow read: if isAuthenticated() && (
+        request.auth.uid == organizerId ||
+        isOwner()
+      );
+      
+      // Write access (create/update):
+      // - Organizers can write their own document (e.g., bank details)
+      // - Owner can read all, but writes are typically done by organizers themselves
+      allow write: if isAuthenticated() && request.auth.uid == organizerId;
+      
+      // Note: accountNumberFull is stored but should be filtered out on client-side
+      // for non-owner users (as per bankDetails.ts implementation)
+    }
+    
+    // ============================================
+    // SUPPORT TICKETS COLLECTION
+    // ============================================
+    match /supportTickets/{ticketId} {
+      // Read access:
+      // - Users can read their own tickets
+      // - Support staff can read all tickets
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isSupport()
+      );
+      
+      // Create access:
+      // - Authenticated users can create tickets (userId will be set from auth.uid)
+      allow create: if isAuthenticated() && 
+                    request.resource.data.userId == request.auth.uid;
+      
+      // Update access:
+      // - Support staff can update ticket status and other fields
+      // - Users cannot update their own tickets (only support can)
+      allow update: if isAuthenticated() && isSupport();
+      
+      // Delete access:
+      // - Only support staff can delete tickets
+      allow delete: if isAuthenticated() && isSupport();
+      
+      // ============================================
+      // SUPPORT TICKET MESSAGES SUBCOLLECTION
+      // ============================================
+      match /messages/{messageId} {
+        // Read access:
+        // - Users can read messages for their own tickets
+        // - Support staff can read messages for all tickets
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
+          isSupport()
+        );
+        
+        // Create access (reply):
+        // - Users can add messages to their own tickets
+        // - Support staff can add messages to any ticket
+        allow create: if isAuthenticated() && (
+          get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
+          isSupport()
+        );
+        
+        // Update/Delete access:
+        // - Only support staff can update/delete messages
+        allow update, delete: if isAuthenticated() && isSupport();
+      }
+    }
+    
+    // ============================================
+    // VOLUNTEERS COLLECTION
+    // ============================================
+    match /volunteers/{volunteerId} {
+      // Read access:
+      // - Organizers can read volunteers they created (hostUserId matches)
+      allow read: if isAuthenticated() && 
+                  resource.data.hostUserId == request.auth.uid;
+      
+      // Create access:
+      // - Organizers can create volunteers (hostUserId will be set to their uid)
+      allow create: if isAuthenticated() && 
+                    request.resource.data.hostUserId == request.auth.uid;
+      
+      // Update access:
+      // - Organizers can update volunteers they created
+      allow update: if isAuthenticated() && 
+                    resource.data.hostUserId == request.auth.uid;
+      
+      // Delete access:
+      // - Organizers can delete volunteers they created
+      allow delete: if isAuthenticated() && 
+                    resource.data.hostUserId == request.auth.uid;
+    }
+    
+    // ============================================
+    // DEFAULT DENY (Security by default)
+    // ============================================
+    // All other collections/documents are denied by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

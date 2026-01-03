@@ -28,21 +28,29 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 
   // 2. GET COOKIES (Fallback/SUPPLEMENTARY)
   // Use the cookie names set by the middleware
-  const sessionId = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("host_session_id="))
-    ?.split("=")[1];
+  // Check if running in browser to avoid SSR crash
+  let sessionId: string | undefined;
+  let sessionKey: string | undefined;
   
-  const sessionKey = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("host_session_key="))
-    ?.split("=")[1];
+  if (typeof window !== "undefined") {
+    sessionId = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("host_session_id="))
+      ?.split("=")[1];
+    
+    sessionKey = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("host_session_key="))
+      ?.split("=")[1];
+  }
 
-  console.log("🔵 Headers prepared", { 
-    hasToken: !!idToken,
-    hasSessionId: !!sessionId, 
-    hasSessionKey: !!sessionKey 
-  });
+  if (process.env.NODE_ENV === "development") {
+    console.log("🔵 Headers prepared", { 
+      hasToken: !!idToken,
+      hasSessionId: !!sessionId, 
+      hasSessionKey: !!sessionKey 
+    });
+  }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -317,7 +325,9 @@ export async function fetchEvent(eventId: string): Promise<Partial<EventFormData
       coverPhotoPortrait: event.basicDetails?.coverPortraitUrl || "",
       locations: event.schedule?.locations || [],
       status: event.status || "draft",
-      lastSaved: event.updatedAt ? new Date(event.updatedAt) : null,
+      lastSaved: event.updatedAt 
+        ? (event.updatedAt.toDate ? event.updatedAt.toDate() : new Date(event.updatedAt))
+        : null,
     };
   } catch (error) {
     console.error("Error fetching event:", error);

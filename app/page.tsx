@@ -88,6 +88,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error loading KYC status:", error);
+      // Don't set error state here to avoid breaking UI
     }
   };
 
@@ -100,6 +101,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error checking owner access:", error);
+      // Don't set error state here to avoid breaking UI
     }
   };
 

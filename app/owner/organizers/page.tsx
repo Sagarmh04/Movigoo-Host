@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { collection, getDocs, query, where, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Shield, Search, Download, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Calendar, DollarSign, TrendingUp, ShieldCheck, MessageSquare, Edit2, Save, X } from "lucide-react";
 
@@ -78,19 +78,23 @@ export default function SuperAdminOrganizersPage() {
     return isOwner ? "ADDED" : (realPayoutStatus || "NOT_ADDED");
   };
 
+  // Wait for auth state before checking access
   useEffect(() => {
-    checkAccess();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthLoading(false);
+      if (user) {
+        checkAccess(user);
+      } else {
+        router.push("/login");
+      }
+    });
+
+    return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkAccess = async () => {
+  const checkAccess = async (user: User) => {
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
       // Check if user is owner (email-based)
       const userIsOwner = user.email === OWNER_EMAIL;
 
@@ -120,14 +124,13 @@ export default function SuperAdminOrganizersPage() {
       for (const doc of snapshot.docs) {
         const data = doc.data();
         
-        // Get user profile data
-        const userDoc = await getDocs(
-          query(collection(db, "users"), where("__name__", "==", doc.id))
-        );
+        // Get user profile data (use direct document access instead of query)
+        const userDocRef = doc(db, "users", doc.id);
+        const userDocSnap = await getDoc(userDocRef);
         
         let userProfile: any = {};
-        if (!userDoc.empty) {
-          userProfile = userDoc.docs[0].data().profile || {};
+        if (userDocSnap.exists()) {
+          userProfile = userDocSnap.data().profile || {};
         }
 
         // Get organizer's events
@@ -479,12 +482,12 @@ export default function SuperAdminOrganizersPage() {
     window.URL.revokeObjectURL(url);
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading organizers data...</p>
+          <p className="mt-4 text-gray-600">{authLoading ? "Verifying access..." : "Loading organizers data..."}</p>
         </div>
       </div>
     );

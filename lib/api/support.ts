@@ -110,8 +110,34 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
 
   // Sort by updatedAt descending (client-side to avoid index requirement)
   tickets.sort((a, b) => {
-    const aTime = a.updatedAt?.seconds || a.updatedAt?._seconds || 0;
-    const bTime = b.updatedAt?.seconds || b.updatedAt?._seconds || 0;
+    // Handle Firestore Timestamp objects properly
+    const getTimestamp = (ts: any): number => {
+      if (!ts) return 0;
+      // If it's a Timestamp object, use toMillis()
+      if (ts instanceof Timestamp) {
+        return ts.toMillis();
+      }
+      // If it has toMillis method, use it
+      if (typeof ts.toMillis === 'function') {
+        return ts.toMillis();
+      }
+      // Fallback for seconds property (convert to milliseconds)
+      if (typeof ts.seconds === 'number') {
+        return ts.seconds * 1000;
+      }
+      // Fallback for internal _seconds property
+      if (typeof ts._seconds === 'number') {
+        return ts._seconds * 1000;
+      }
+      // If it's a date string or number, convert to timestamp
+      if (typeof ts === 'string' || typeof ts === 'number') {
+        return new Date(ts).getTime();
+      }
+      return 0;
+    };
+    
+    const aTime = getTimestamp(a.updatedAt);
+    const bTime = getTimestamp(b.updatedAt);
     return bTime - aTime;
   });
 

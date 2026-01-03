@@ -132,13 +132,12 @@ export async function computeHostStats(): Promise<HostStats> {
  * Note: We fetch all bookings and filter by status in compute functions to handle case variations
  */
 async function fetchAllBookings(eventIds: string[]): Promise<any[]> {
-  const allBookings: any[] = [];
-  
   if (eventIds.length === 0) {
-    return allBookings;
+    return [];
   }
   
-  for (const eventId of eventIds) {
+  // Fetch bookings in parallel for better performance
+  const bookingPromises = eventIds.map(async (eventId) => {
     try {
       // Fetch all bookings from this event's subcollection
       const bookingsQuery = query(
@@ -154,13 +153,17 @@ async function fetchAllBookings(eventIds: string[]): Promise<any[]> {
         };
       });
       
-      allBookings.push(...eventBookings);
+      return eventBookings;
     } catch (error) {
+      // Log error but return empty array to allow partial data
       console.error(`Error fetching bookings for event ${eventId}:`, error);
+      return [];
     }
-  }
+  });
   
-  return allBookings;
+  // Wait for all fetches to complete and flatten results
+  const bookingArrays = await Promise.all(bookingPromises);
+  return bookingArrays.flat();
 }
 
 /**
