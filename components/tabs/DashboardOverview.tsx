@@ -38,34 +38,77 @@ export default function DashboardOverview() {
       return;
     }
 
-    // Auth is ready and user exists - load stats
+    // Guard against undefined UID
+    if (!user?.uid) {
+      console.error("User object exists but UID is undefined");
+      setError("User authentication error: Missing UID");
+      setLoading(false);
+      return;
+    }
+
+    // Auth is ready and user exists with valid UID - load stats
     loadStats();
-  }, [authLoading, user]);
+  }, [authLoading, user, user?.uid]);
 
   const loadStats = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      // Ensure user and UID exist before proceeding
+      if (!user || !user?.uid) {
+        console.error("loadStats called but user or UID is missing");
+        setError("User authentication error: Missing UID");
+        setLoading(false);
+        return;
+      }
+
+      const hostId = user.uid;
+      const analyticsDocPath = `host_analytics/${hostId}`;
+      
+      // DEBUG: Log auth and path info
+      console.log("🔍 [Analytics Debug] Reading analytics:", {
+        hostId,
+        analyticsDocPath,
+        userEmail: user.email,
+      });
+      
       // Load analytics from host_analytics collection (analytics collections ONLY)
       let analyticsData = null;
       try {
         analyticsData = await getCurrentHostAnalytics();
+        
+        // DEBUG: Log fetched analytics values
+        console.log("✅ [Analytics Debug] Fetched analytics data:", {
+          totalTicketsSold: analyticsData?.totalTicketsSold,
+          totalRevenue: analyticsData?.totalRevenue,
+          updatedAt: analyticsData?.updatedAt,
+          docExists: analyticsData !== null,
+        });
       } catch (analyticsError) {
-        console.warn("Could not load analytics:", analyticsError);
+        console.error("❌ [Analytics Debug] Error loading analytics:", analyticsError);
         // Continue with computed stats even if analytics fails
       }
       
       // Load computed stats for other metrics (events, bookings, etc.)
       const computedStats = await computeHostStats();
       
-      // Override totalTicketsSold with analytics data (if available)
+      // Override totalTicketsSold and totalRevenue with analytics data (if available)
       // If analytics doc doesn't exist, show 0 instead of computed value
       const finalStats: HostStats = {
         ...computedStats,
         totalTicketsSold: analyticsData?.totalTicketsSold ?? 0,
+        totalRevenue: analyticsData?.totalRevenue ?? computedStats.totalRevenue,
       };
       
+      // DEBUG: Log final state values
+      console.log("📊 [Analytics Debug] Final stats state:", {
+        totalTicketsSold: finalStats.totalTicketsSold,
+        totalRevenue: finalStats.totalRevenue,
+        source: analyticsData ? "analytics" : "computed",
+      });
+      
+      // Force state update
       setStats(finalStats);
     } catch (err: any) {
       console.error("Error loading stats:", err);

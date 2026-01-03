@@ -150,7 +150,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* Beneficiary Name */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">
-          Beneficiary Name <span className="text-black">*</span>
+          Beneficiary Name <span className="text-red-500">*</span>
         </label>
         <p className="text-xs text-gray-400 mb-2">As per bank records</p>
         <input
@@ -173,7 +173,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* Account Type */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">
-          Account Type <span className="text-black">*</span>
+          Account Type <span className="text-red-500">*</span>
         </label>
         <select
           value={formData.accountType}
@@ -188,7 +188,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* Bank Name (Searchable Dropdown) */}
       <div className="relative">
         <label className="block text-sm font-medium text-white mb-2">
-          Bank Name <span className="text-black">*</span>
+          Bank Name <span className="text-red-500">*</span>
         </label>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={18} />
@@ -269,7 +269,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* Account Number */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">
-          Account Number <span className="text-black">*</span>
+          Account Number <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
@@ -292,7 +292,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* Re-enter Account Number */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">
-          Re-enter Account Number <span className="text-black">*</span>
+          Re-enter Account Number <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
@@ -315,7 +315,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
       {/* IFSC Code */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">
-          IFSC Code <span className="text-black">*</span>
+          IFSC Code <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
