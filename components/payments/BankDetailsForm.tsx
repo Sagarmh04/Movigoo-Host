@@ -149,7 +149,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Beneficiary Name */}
       <div>
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           Beneficiary Name <span className="text-red-500">*</span>
         </label>
         <p className="text-xs text-gray-400 mb-2">As per bank records</p>
@@ -172,7 +172,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
 
       {/* Account Type */}
       <div>
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           Account Type <span className="text-red-500">*</span>
         </label>
         <select
@@ -187,7 +187,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
 
       {/* Bank Name (Searchable Dropdown) */}
       <div className="relative">
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           Bank Name <span className="text-red-500">*</span>
         </label>
         <div className="relative">
@@ -268,7 +268,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
 
       {/* Account Number */}
       <div>
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           Account Number <span className="text-red-500">*</span>
         </label>
         <input
@@ -291,7 +291,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
 
       {/* Re-enter Account Number */}
       <div>
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           Re-enter Account Number <span className="text-red-500">*</span>
         </label>
         <input
@@ -314,7 +314,7 @@ export default function BankDetailsForm({ onSubmit, onCancel, initialData }: Ban
 
       {/* IFSC Code */}
       <div>
-        <label className="block text-sm font-medium text-white mb-2">
+        <label className="block text-sm font-medium text-black mb-2">
           IFSC Code <span className="text-red-500">*</span>
         </label>
         <input

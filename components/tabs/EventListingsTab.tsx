@@ -8,10 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { fetchEvents } from "@/lib/api/events";
 import { EventSummary } from "@/lib/types/event";
+import { getMultipleEventAnalytics, EventAnalytics } from "@/lib/utils/analytics";
 
 export default function EventListingsTab() {
   const router = useRouter();
   const [events, setEvents] = useState<EventSummary[]>([]);
+  const [eventAnalytics, setEventAnalytics] = useState<Record<string, EventAnalytics>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,6 +21,21 @@ export default function EventListingsTab() {
       try {
         const data = await fetchEvents();
         setEvents(data);
+        
+        // Fetch analytics for all events in parallel (READ analytics ONLY)
+        if (data.length > 0) {
+          const eventIds = data.map(event => event.id);
+          console.log("📊 [Event Listings] Fetching analytics for events:", eventIds);
+          
+          try {
+            const analytics = await getMultipleEventAnalytics(eventIds);
+            console.log("✅ [Event Listings] Analytics fetched:", analytics);
+            setEventAnalytics(analytics);
+          } catch (analyticsError) {
+            console.error("❌ [Event Listings] Error fetching analytics:", analyticsError);
+            // Continue even if analytics fails - will show 0 tickets
+          }
+        }
       } catch (error) {
         console.error("Failed to load events", error);
       } finally {
@@ -114,7 +131,9 @@ export default function EventListingsTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    <span>0 tickets sold</span>
+                    <span>
+                      {eventAnalytics[event.id]?.totalTicketsSold ?? 0} tickets sold
+                    </span>
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2">

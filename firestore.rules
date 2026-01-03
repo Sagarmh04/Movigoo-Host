@@ -213,6 +213,27 @@ service cloud.firestore {
     }
     
     // ============================================
+    // EVENT ANALYTICS COLLECTION
+    // ============================================
+    match /event_analytics/{eventId} {
+      // Read access:
+      // - Organizers can read analytics for their own events
+      //   (check if event exists and hostUserId/organizerId matches)
+      // - Owner can read all event analytics
+      allow read: if isAuthenticated() && (
+        // Check if event belongs to organizer
+        (exists(/databases/$(database)/documents/events/$(eventId)) &&
+         (get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
+          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid)) ||
+        // Owner can read all
+        isOwner()
+      );
+      
+      // Write access: Backend/Cloud Functions only (no client writes)
+      allow write: if false;
+    }
+    
+    // ============================================
     // DEFAULT DENY (Security by default)
     // ============================================
     // All other collections/documents are denied by default
