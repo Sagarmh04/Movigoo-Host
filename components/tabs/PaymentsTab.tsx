@@ -163,8 +163,8 @@ export default function PaymentsTab() {
     }
 
     const raw = payoutAmounts[row.organizerId];
-    const amount = Number(raw);
-    if (!raw || !Number.isFinite(amount) || amount <= 0) {
+    const payoutAmount = Number(raw);
+    if (!raw || !Number.isFinite(payoutAmount) || payoutAmount <= 0) {
       toast.error("Enter a valid payout amount");
       return;
     }
@@ -176,39 +176,24 @@ export default function PaymentsTab() {
 
     setPayoutProcessing((prev) => ({ ...prev, [row.organizerId]: true }));
     try {
-      await runTransaction(db, async (tx) => {
-        const payoutsRef = collection(db, "payouts");
-        const payoutDocRef = doc(payoutsRef);
+      // Simplified write: only record the payout document first
+      const payoutsRef = collection(db, "payouts");
+      const payoutDocRef = doc(payoutsRef);
 
-        tx.set(payoutDocRef, {
-          organizerId: row.organizerId,
-          amount,
-          date: serverTimestamp(),
-          status: "completed",
-          bankName: row.bankName,
-          last4: row.last4,
-        });
-
-        const analyticsRef = doc(db, "host_analytics", row.organizerId);
-        const analyticsSnap = await tx.get(analyticsRef);
-        const current = analyticsSnap.exists() ? (analyticsSnap.data() as any) : {};
-        const currentPaid = typeof current.totalPaidOut === "number" ? current.totalPaidOut : 0;
-
-        tx.set(
-          analyticsRef,
-          {
-            totalPaidOut: currentPaid + amount,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+      await setDoc(payoutDocRef, {
+        organizerId: row.organizerId,
+        amount: payoutAmount,
+        date: serverTimestamp(),
+        status: "completed",
+        bankName: row.bankName,
+        last4: row.last4,
       });
 
-      toast.success(`Payout recorded: ₹${amount.toFixed(2)} for ${row.email || row.organizerId}`);
+      toast.success(`Payout recorded: ₹${payoutAmount.toFixed(2)} for ${row.email || row.organizerId}`);
       setPayoutAmounts((prev) => ({ ...prev, [row.organizerId]: "" }));
     } catch (error) {
-      console.error("Error processing payout:", error);
-      toast.error("Failed to record payout");
+      console.error("FULL PAYOUT ERROR:", error);
+      toast.error("Failed: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setPayoutProcessing((prev) => ({ ...prev, [row.organizerId]: false }));
     }
