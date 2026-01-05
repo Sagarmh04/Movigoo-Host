@@ -8,6 +8,19 @@ import EditConfirmationModal from "@/components/payments/EditConfirmationModal";
 import { saveBankDetails, getBankDetails, OrganizerPaymentData } from "@/lib/api/bankDetails";
 import { getKycStatus } from "@/lib/api/events";
 import { KycStatus } from "@/lib/types/event";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { collection, getDoc, getDocs, doc } from "firebase/firestore";
+
+type AdminOrganizerBankRow = {
+  organizerId: string;
+  name: string;
+  email: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  kycStatus: string;
+};
 
 export default function PaymentsTab() {
   const [kycStatus, setKycStatus] = useState<KycStatus>("not_started");
@@ -15,9 +28,25 @@ export default function PaymentsTab() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [adminRows, setAdminRows] = useState<AdminOrganizerBankRow[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Owner email - single source of truth
+  const OWNER_EMAIL = "movigoo4@gmail.com";
 
   useEffect(() => {
-    loadData();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const userIsOwner = user?.email === OWNER_EMAIL;
+      setIsOwner(userIsOwner);
+      if (userIsOwner) {
+        loadAdminData(user);
+      } else {
+        loadData();
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const loadData = async () => {
@@ -35,6 +64,83 @@ export default function PaymentsTab() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAdminData = async (user: User | null) => {
+    if (user?.email !== OWNER_EMAIL) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const organizersRef = collection(db, "organizers");
+      const snapshot = await getDocs(organizersRef);
+
+      const rows = await Promise.all(
+        snapshot.docs.map(async (organizerDoc) => {
+          const data = organizerDoc.data() as any;
+          const bankDetails = data.bankDetails as any | undefined;
+
+          const userDocRef = doc(db, "users", organizerDoc.id);
+          const userDocSnap = await getDoc(userDocRef);
+          const userProfile = userDocSnap.exists()
+            ? ((userDocSnap.data() as any)?.profile ?? {})
+            : {};
+
+          const email =
+            (typeof userProfile.email === "string" && userProfile.email) ||
+            (typeof data.email === "string" && data.email) ||
+            "";
+          const name =
+            (typeof userProfile.name === "string" && userProfile.name) ||
+            (typeof data.name === "string" && data.name) ||
+            "";
+
+          const accountNumberFull =
+            typeof bankDetails?.accountNumberFull === "string"
+              ? bankDetails.accountNumberFull
+              : "";
+          const accountNumberLast4 =
+            typeof bankDetails?.accountNumberLast4 === "string"
+              ? bankDetails.accountNumberLast4
+              : "";
+          const accountNumber =
+            accountNumberFull ||
+            (accountNumberLast4 ? `XXXXXX${accountNumberLast4}` : "");
+
+          const row: AdminOrganizerBankRow = {
+            organizerId: organizerDoc.id,
+            name,
+            email,
+            bankName: typeof bankDetails?.bankName === "string" ? bankDetails.bankName : "",
+            accountNumber,
+            ifscCode: typeof bankDetails?.ifscCode === "string" ? bankDetails.ifscCode : "",
+            kycStatus: typeof data.kycStatus === "string" ? data.kycStatus : "not_started",
+          };
+
+          return row;
+        })
+      );
+
+      // Only show organizers who have bank details filled
+      setAdminRows(rows.filter((r) => !!r.bankName || !!r.ifscCode || !!r.accountNumber));
+    } catch (error) {
+      console.error("Error loading admin bank details:", error);
+      toast.error("Failed to load organizers bank details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProcessPayout = (row: AdminOrganizerBankRow) => {
+    console.log("[Owner] Process Payout:", {
+      organizerId: row.organizerId,
+      email: row.email,
+      bankName: row.bankName,
+      accountNumber: row.accountNumber,
+      ifscCode: row.ifscCode,
+    });
+    toast.success(`Payout processing logged for ${row.email || row.organizerId}`);
   };
 
   const handleSaveBankDetails = async (details: BankDetailsData) => {
@@ -59,6 +165,90 @@ export default function PaymentsTab() {
   };
 
   const renderBankDetailsSection = () => {
+    if (isOwner) {
+      const filtered = adminRows.filter((r) => {
+        const q = searchTerm.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          r.email.toLowerCase().includes(q) ||
+          r.name.toLowerCase().includes(q)
+        );
+      });
+
+      return (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Manual Payouts (Admin)</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                All organizers&apos; bank details
+              </p>
+            </div>
+
+            <div className="w-full md:w-80">
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by name or email"
+                className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-2/3 mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organizer Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">IFSC Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">KYC Status</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {filtered.map((r) => (
+                    <tr key={r.organizerId} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">{r.name || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{r.email || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{r.bankName || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.accountNumber || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.ifscCode || "N/A"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{r.kycStatus || "N/A"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleProcessPayout(r)}
+                          className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                        >
+                          Process Payout
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                        No organizers found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (loading) {
       return (
         <div className="bg-white p-6 rounded-lg shadow">
@@ -193,7 +383,7 @@ export default function PaymentsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">Bank Details</h1>
+        <h1 className="text-3xl font-semibold text-gray-900">Manual Payouts</h1>
         <p className="text-gray-500 mt-1">
           Manage your bank account information for manual payouts processed by Movigoo.
         </p>
