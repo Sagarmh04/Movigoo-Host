@@ -10,7 +10,16 @@ import { getKycStatus } from "@/lib/api/events";
 import { KycStatus } from "@/lib/types/event";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { collection, getDoc, getDocs, doc } from "firebase/firestore";
+import {
+  collection,
+  getDoc,
+  getDocs,
+  doc,
+  runTransaction,
+  serverTimestamp,
+  query,
+  where,
+} from "firebase/firestore";
 
 type AdminOrganizerBankRow = {
   organizerId: string;
@@ -20,6 +29,15 @@ type AdminOrganizerBankRow = {
   accountNumber: string;
   ifscCode: string;
   kycStatus: string;
+  last4: string;
+};
+
+type PayoutRecord = {
+  id: string;
+  organizerId: string;
+  amount: number;
+  status: string;
+  date: any;
 };
 
 export default function PaymentsTab() {
@@ -31,6 +49,9 @@ export default function PaymentsTab() {
   const [isOwner, setIsOwner] = useState(false);
   const [adminRows, setAdminRows] = useState<AdminOrganizerBankRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [payoutAmounts, setPayoutAmounts] = useState<Record<string, string>>({});
+  const [payoutProcessing, setPayoutProcessing] = useState<Record<string, boolean>>({});
+  const [payoutHistory, setPayoutHistory] = useState<PayoutRecord[]>([]);
 
   // Owner email - single source of truth
   const OWNER_EMAIL = "movigoo4@gmail.com";
@@ -43,6 +64,7 @@ export default function PaymentsTab() {
         loadAdminData(user);
       } else {
         loadData();
+        loadOrganizerPayoutHistory(user);
       }
     });
 
@@ -116,6 +138,7 @@ export default function PaymentsTab() {
             accountNumber,
             ifscCode: typeof bankDetails?.ifscCode === "string" ? bankDetails.ifscCode : "",
             kycStatus: typeof data.kycStatus === "string" ? data.kycStatus : "not_started",
+            last4: accountNumberLast4,
           };
 
           return row;
@@ -132,15 +155,113 @@ export default function PaymentsTab() {
     }
   };
 
-  const handleProcessPayout = (row: AdminOrganizerBankRow) => {
-    console.log("[Owner] Process Payout:", {
-      organizerId: row.organizerId,
-      email: row.email,
-      bankName: row.bankName,
-      accountNumber: row.accountNumber,
-      ifscCode: row.ifscCode,
-    });
-    toast.success(`Payout processing logged for ${row.email || row.organizerId}`);
+  const handleProcessPayout = async (row: AdminOrganizerBankRow) => {
+    const user = auth.currentUser;
+    if (user?.email !== OWNER_EMAIL) {
+      toast.error("Unauthorized: Owner only");
+      return;
+    }
+
+    const raw = payoutAmounts[row.organizerId];
+    const amount = Number(raw);
+    if (!raw || !Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid payout amount");
+      return;
+    }
+
+    if (!row.bankName || !row.last4) {
+      toast.error("Missing bank details for this organizer");
+      return;
+    }
+
+    setPayoutProcessing((prev) => ({ ...prev, [row.organizerId]: true }));
+    try {
+      await runTransaction(db, async (tx) => {
+        const payoutsRef = collection(db, "payouts");
+        const payoutDocRef = doc(payoutsRef);
+
+        tx.set(payoutDocRef, {
+          organizerId: row.organizerId,
+          amount,
+          date: serverTimestamp(),
+          status: "completed",
+          bankName: row.bankName,
+          last4: row.last4,
+        });
+
+        const analyticsRef = doc(db, "host_analytics", row.organizerId);
+        const analyticsSnap = await tx.get(analyticsRef);
+        const current = analyticsSnap.exists() ? (analyticsSnap.data() as any) : {};
+        const currentPaid = typeof current.totalPaidOut === "number" ? current.totalPaidOut : 0;
+
+        tx.set(
+          analyticsRef,
+          {
+            totalPaidOut: currentPaid + amount,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+
+      toast.success(`Payout recorded: ₹${amount.toFixed(2)} for ${row.email || row.organizerId}`);
+      setPayoutAmounts((prev) => ({ ...prev, [row.organizerId]: "" }));
+    } catch (error) {
+      console.error("Error processing payout:", error);
+      toast.error("Failed to record payout");
+    } finally {
+      setPayoutProcessing((prev) => ({ ...prev, [row.organizerId]: false }));
+    }
+  };
+
+  const loadOrganizerPayoutHistory = async (user: User | null) => {
+    if (!user?.uid || user?.email === OWNER_EMAIL) {
+      return;
+    }
+
+    try {
+      const payoutsRef = collection(db, "payouts");
+      const q = query(
+        payoutsRef,
+        where("organizerId", "==", user.uid)
+      );
+      const snapshot = await getDocs(q);
+
+      const rows: PayoutRecord[] = snapshot.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          organizerId: data.organizerId,
+          amount: typeof data.amount === "number" ? data.amount : 0,
+          status: typeof data.status === "string" ? data.status : "completed",
+          date: data.date,
+        };
+      });
+
+      rows.sort((a, b) => {
+        const aTime = a.date?.seconds || 0;
+        const bTime = b.date?.seconds || 0;
+        return bTime - aTime;
+      });
+
+      setPayoutHistory(rows);
+    } catch (error) {
+      console.error("Error loading payout history:", error);
+    }
+  };
+
+  const formatPayoutDate = (ts: any) => {
+    try {
+      if (!ts) return "-";
+      const date = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+      return date.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "-";
+    }
   };
 
   const handleSaveBankDetails = async (details: BankDetailsData) => {
@@ -211,6 +332,7 @@ export default function PaymentsTab() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Number</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">IFSC Code</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">KYC Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payout Amount</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -223,12 +345,27 @@ export default function PaymentsTab() {
                       <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.accountNumber || "N/A"}</td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.ifscCode || "N/A"}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{r.kycStatus || "N/A"}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          inputMode="decimal"
+                          value={payoutAmounts[r.organizerId] ?? ""}
+                          onChange={(e) =>
+                            setPayoutAmounts((prev) => ({
+                              ...prev,
+                              [r.organizerId]: e.target.value,
+                            }))
+                          }
+                          placeholder="5000"
+                          className="w-28 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => handleProcessPayout(r)}
-                          className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                          disabled={!!payoutProcessing[r.organizerId]}
+                          className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
                         >
-                          Process Payout
+                          {payoutProcessing[r.organizerId] ? "Processing..." : "Process Payout"}
                         </button>
                       </td>
                     </tr>
@@ -236,7 +373,7 @@ export default function PaymentsTab() {
 
                   {filtered.length === 0 && (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
                         No organizers found.
                       </td>
                     </tr>
@@ -380,6 +517,55 @@ export default function PaymentsTab() {
     );
   };
 
+  const renderPayoutHistorySection = () => {
+    if (isOwner) {
+      return null;
+    }
+
+    return (
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Payout History</h2>
+
+        {loading ? (
+          <div className="animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-2/3 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+        ) : payoutHistory.length === 0 ? (
+          <p className="text-sm text-gray-500">No payouts recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {payoutHistory.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-700">{formatPayoutDate(p.date)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {new Intl.NumberFormat("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }).format(p.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">Completed</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -390,6 +576,8 @@ export default function PaymentsTab() {
       </div>
 
       {renderBankDetailsSection()}
+
+      {!isOwner && renderPayoutHistorySection()}
 
       <EditConfirmationModal
         isOpen={showEditModal}
