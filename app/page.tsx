@@ -53,16 +53,23 @@ export default function DashboardPage() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       checkOwnerAccess(user);
     });
-    
-    // Check for hash in URL to switch tabs (e.g., #support from owner panel)
-    if (typeof window !== "undefined" && window.location.hash) {
+
+    const applyHashToTab = () => {
+      if (typeof window === "undefined") return;
       const hash = window.location.hash.substring(1); // Remove the '#'
       if (hash) {
         setActiveTab(hash);
       }
-    }
+    };
 
-    return () => unsubscribe();
+    // Check for hash in URL to switch tabs (e.g., #support from owner panel)
+    applyHashToTab();
+    window.addEventListener("hashchange", applyHashToTab);
+
+    return () => {
+      window.removeEventListener("hashchange", applyHashToTab);
+      unsubscribe();
+    };
   }, []);
 
   // Refresh KYC status when switching to verification tab

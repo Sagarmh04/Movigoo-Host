@@ -6,6 +6,8 @@ import { computeHostStats, type HostStats } from "@/lib/utils/stats";
 import { getCurrentHostAnalytics } from "@/lib/utils/analytics";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState<HostStats | null>(null);
@@ -13,6 +15,7 @@ export default function DashboardOverview() {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paidTotal, setPaidTotal] = useState(0);
 
   // Wait for auth state to be ready
   useEffect(() => {
@@ -23,6 +26,40 @@ export default function DashboardOverview() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      return;
+    }
+
+    const payoutsRef = collection(db, "payouts");
+    const q = query(payoutsRef, where("organizerId", "==", user.uid));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        let sum = 0;
+        snapshot.forEach((d) => {
+          const data = d.data() as any;
+          const amount = data?.amount;
+          if (typeof amount === "number") {
+            sum += amount;
+          } else if (typeof amount === "string") {
+            const n = Number(amount);
+            if (Number.isFinite(n)) {
+              sum += n;
+            }
+          }
+        });
+        setPaidTotal(sum);
+      },
+      (err) => {
+        console.error("Error listening to payouts:", err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Load stats only after auth is ready
   useEffect(() => {
@@ -211,6 +248,9 @@ export default function DashboardOverview() {
     ? ((displayStats.bookingsThisMonth - displayStats.bookingsLastMonth) / displayStats.bookingsLastMonth) * 100
     : 0;
 
+  const netEarnings = displayStats.totalRevenue * 0.95;
+  const pendingManualPayout = Math.max(0, netEarnings - paidTotal);
+
   return (
     <div className="space-y-6">
       <div>
@@ -256,15 +296,28 @@ export default function DashboardOverview() {
             <div>
               <p className="text-gray-500 text-sm">Amount Paid</p>
               <h2 className={`text-3xl font-bold mt-2 ${
-                displayStats.totalPaidAmount > 0 ? "text-green-600" : "text-gray-400"
+                paidTotal > 0 ? "text-green-600" : "text-gray-400"
               }`}>
-                {formatCurrency(displayStats.totalPaidAmount || 0)}
+                {formatCurrency(paidTotal || 0)}
               </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                ( <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.location.hash = "payments";
+                    }
+                  }}
+                  className="text-primary hover:underline"
+                >
+                  Click here
+                </button> to view payout history )
+              </p>
               <p className="text-xs text-gray-400 mt-1">
-                {displayStats.totalPaidAmount > 0 ? (
-                  <span className="text-green-600 font-medium">✓ Paid</span>
+                {pendingManualPayout > 0 ? (
+                  <span className="text-orange-600 font-medium">Pending Manual Payout: {formatCurrency(pendingManualPayout)}</span>
                 ) : (
-                  <span className="text-orange-600 font-medium">Pending Manual Payout</span>
+                  <span className="text-green-600 font-medium">✓ Paid</span>
                 )}
               </p>
             </div>
