@@ -1,6 +1,9 @@
 // /host/app/api/login/route.ts
 import { NextRequest } from "next/server";
 import { parseCookieHeader, serializeCookie } from "@/lib/cookies";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+
+export const runtime = "nodejs";
 
 // For Firebase Functions v2 on Cloud Run, use the base URL (function name is in the service name)
 const CF_CREATE_SESSION = process.env.FIREBASE_CF_ADMIN_CREATE_SESSION_URL || 
@@ -19,11 +22,35 @@ function cookieOptions() {
   };
 }
 
-
 function buildSetCookieHeaders(...cookies: string[]) {
   const headers = new Headers();
   cookies.forEach((cookie) => headers.append("Set-Cookie", cookie));
   return headers;
+}
+
+async function getUserRoleFromUsersCollection(idToken: string): Promise<{
+  uid: string;
+  role: string | null;
+} | null> {
+  try {
+    const adminAuth = getAdminAuth();
+    const adminDb = getAdminDb();
+
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const snap = await adminDb.collection("users").doc(uid).get();
+    const data = snap.exists ? (snap.data() as any) : null;
+    const role = (data?.role ?? data?.profile?.role ?? null) as string | null;
+
+    return { uid, role };
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeJwt(token: string) {
+  return typeof token === "string" && token.split(".").length === 3;
 }
 
 export async function POST(req: NextRequest) {
@@ -33,6 +60,8 @@ export async function POST(req: NextRequest) {
     if (!idToken) {
       return new Response(JSON.stringify({ error: "MISSING_ID_TOKEN" }), { status: 400 });
     }
+
+    const userInfo = await getUserRoleFromUsersCollection(idToken);
 
     console.log("[LOGIN API] Calling Cloud Function:", CF_CREATE_SESSION);
 
@@ -60,11 +89,24 @@ export async function POST(req: NextRequest) {
         toString: fetchErr?.toString(),
       };
       console.error("[LOGIN API] Failed to fetch Cloud Function - FULL ERROR:", JSON.stringify(fullError, null, 2));
-      return new Response(JSON.stringify({ 
-        error: "CLOUD_FUNCTION_FETCH_FAILED", 
-        message: "Could not reach Cloud Function. Check your network and Cloud Function URL.",
-        details: fullError
-      }), { status: 503 });
+      if (userInfo?.role === "organizer" && looksLikeJwt(idToken)) {
+        const opts = cookieOptions();
+        const cookieId = serializeCookie(COOKIE_NAME_ID, userInfo.uid, { ...opts, httpOnly: true });
+        const cookieKey = serializeCookie(COOKIE_NAME_KEY, idToken, { ...opts, httpOnly: true });
+        return new Response(JSON.stringify({ success: true, mode: "fallback" }), {
+          status: 200,
+          headers: buildSetCookieHeaders(cookieId, cookieKey),
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "CLOUD_FUNCTION_FETCH_FAILED",
+          message: "Could not reach Cloud Function. Check your network and Cloud Function URL.",
+          details: fullError,
+        }),
+        { status: 503 }
+      );
     }
 
     if (!cfRes.ok) {
@@ -101,9 +143,20 @@ export async function POST(req: NextRequest) {
       }
 
       console.error("[LOGIN API] Cloud Function error response - FULL ERROR:", errorText);
-      return new Response(errorText, { 
+
+      if (userInfo?.role === "organizer" && looksLikeJwt(idToken)) {
+        const opts = cookieOptions();
+        const cookieId = serializeCookie(COOKIE_NAME_ID, userInfo.uid, { ...opts, httpOnly: true });
+        const cookieKey = serializeCookie(COOKIE_NAME_KEY, idToken, { ...opts, httpOnly: true });
+        return new Response(JSON.stringify({ success: true, mode: "fallback" }), {
+          status: 200,
+          headers: buildSetCookieHeaders(cookieId, cookieKey),
+        });
+      }
+
+      return new Response(errorText, {
         status: cfRes.status,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -130,11 +183,25 @@ export async function POST(req: NextRequest) {
     const { sessionId, sessionKey } = sessionData;
     if (!sessionId || !sessionKey) {
       console.error("[LOGIN API] Missing session data. Received:", JSON.stringify(sessionData, null, 2));
-      return new Response(JSON.stringify({ 
-        error: "MISSING_SESSION_DATA", 
-        message: "Cloud Function did not return session data",
-        receivedData: sessionData
-      }), { status: 500 });
+
+      if (userInfo?.role === "organizer" && looksLikeJwt(idToken)) {
+        const opts = cookieOptions();
+        const cookieId = serializeCookie(COOKIE_NAME_ID, userInfo.uid, { ...opts, httpOnly: true });
+        const cookieKey = serializeCookie(COOKIE_NAME_KEY, idToken, { ...opts, httpOnly: true });
+        return new Response(JSON.stringify({ success: true, mode: "fallback" }), {
+          status: 200,
+          headers: buildSetCookieHeaders(cookieId, cookieKey),
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "MISSING_SESSION_DATA",
+          message: "Cloud Function did not return session data",
+          receivedData: sessionData,
+        }),
+        { status: 500 }
+      );
     }
 
     // set cookies

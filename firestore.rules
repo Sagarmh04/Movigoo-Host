@@ -2,98 +2,107 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function: Check if user is owner (movigoo4@gmail.com)
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Check if user is owner (movigoo4@gmail.com)
     function isOwner() {
       return request.auth != null && request.auth.token.email == 'movigoo4@gmail.com';
     }
     
-    // Helper function: Check if user is support staff
+    // Check if user is support staff
     function isSupport() {
       return request.auth != null && 
              (request.auth.token.email == 'movigootech@gmail.com' || 
               request.auth.token.email == 'movigoo4@gmail.com');
     }
     
-    // Helper function: Check if user is authenticated
+    // Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
+    }
+    
+    // Helper: Check if event belongs to organizer
+    function isEventOwner(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId)) &&
+             (get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
+              get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid);
     }
     
     // ============================================
     // USERS COLLECTION
     // ============================================
+    // Path: users/{userId}
+    // Purpose: User profile information
     match /users/{userId} {
-      // Users can read their own profile
+      // Read: Users can read their own profile
       allow read: if isAuthenticated() && request.auth.uid == userId;
       
-      // Users can write/update their own profile
+      // Write: Users can update their own profile
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
     
     // ============================================
     // EVENTS COLLECTION
     // ============================================
+    // Path: events/{eventId}
+    // Purpose: Event listings created by organizers
     match /events/{eventId} {
-      // Read access:
-      // - Organizers can read events where hostUserId or organizerId matches their uid
-      // - Owner can read all events
+      // Read: Organizers can read their own events, owner can read all
       allow read: if isAuthenticated() && (
         resource.data.hostUserId == request.auth.uid ||
         resource.data.organizerId == request.auth.uid ||
         isOwner()
       );
       
-      // Create access:
-      // - Authenticated users can create events (hostUserId will be set by backend)
+      // Create: Authenticated users can create events (backend sets hostUserId)
       allow create: if isAuthenticated();
       
-      // Update access:
-      // - Organizers can update their own events (where hostUserId or organizerId matches)
-      // - Owner can update manualPayoutPaid, manualPayoutNote, manualPayoutPaidAt, updatedAt fields on any event
+      // Update: Organizers can update their own events
+      // Owner can update payout fields (manualPayoutPaid, manualPayoutNote, manualPayoutPaidAt, updatedAt)
       allow update: if isAuthenticated() && (
         // Organizer can update their own events
-        (resource.data.hostUserId == request.auth.uid || resource.data.organizerId == request.auth.uid) ||
-        // Owner can update payout fields on any event
+        (resource.data.hostUserId == request.auth.uid || 
+         resource.data.organizerId == request.auth.uid) ||
+        // Owner can update payout fields only
         (isOwner() && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['manualPayoutPaid', 'manualPayoutNote', 'manualPayoutPaidAt', 'updatedAt']))
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'manualPayoutPaid', 
+           'manualPayoutNote', 
+           'manualPayoutPaidAt', 
+           'updatedAt'
+         ]))
       );
       
-      // Delete access:
-      // - Organizers can delete their own events
+      // Delete: Organizers can delete their own events
       allow delete: if isAuthenticated() && (
         resource.data.hostUserId == request.auth.uid ||
         resource.data.organizerId == request.auth.uid
       );
       
       // ============================================
-      // BOOKINGS SUBCOLLECTION (events/{eventId}/bookings)
+      // BOOKINGS SUBCOLLECTION
       // ============================================
+      // Path: events/{eventId}/bookings/{bookingId}
+      // Purpose: Ticket bookings for events
       match /bookings/{bookingId} {
-        // Read access:
-        // - Organizers can read bookings for their events
-        // - Owner can read all bookings
+        // Read: Organizers can read bookings for their events, owner can read all
         allow read: if isAuthenticated() && (
-          get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
-          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid ||
+          isEventOwner(eventId) ||
           isOwner()
         );
         
-        // Create access:
-        // - Backend/API creates bookings (not from client directly)
-        // Allow authenticated users for now (backend should handle validation)
+        // Create: Authenticated users (bookings created by backend/API)
         allow create: if isAuthenticated();
         
-        // Update access:
-        // - Organizers can update bookings for their events
-        // - Owner can update any booking
+        // Update: Organizers can update bookings for their events, owner can update any
         allow update: if isAuthenticated() && (
-          get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
-          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid ||
+          isEventOwner(eventId) ||
           isOwner()
         );
         
-        // Delete access:
-        // - Only owner can delete bookings (or backend)
+        // Delete: Only owner can delete bookings (or backend)
         allow delete: if isOwner();
       }
     }
@@ -101,72 +110,62 @@ service cloud.firestore {
     // ============================================
     // ORGANIZERS COLLECTION
     // ============================================
+    // Path: organizers/{organizerId}
+    // Purpose: Organizer profiles with bank details and KYC status
     match /organizers/{organizerId} {
-      // Read access:
-      // - Organizers can read their own document
-      // - Owner can read all organizer documents
+      // Read: Organizers can read their own document, owner can read all
       allow read: if isAuthenticated() && (
         request.auth.uid == organizerId ||
         isOwner()
       );
       
-      // Write access (create/update):
-      // - Organizers can write their own document (e.g., bank details)
-      // - Owner can read all, but writes are typically done by organizers themselves
+      // Write: Organizers can update their own document (e.g., bank details, KYC)
       allow write: if isAuthenticated() && request.auth.uid == organizerId;
       
-      // Note: accountNumberFull is stored but should be filtered out on client-side
-      // for non-owner users (as per bankDetails.ts implementation)
+      // Note: accountNumberFull field should be filtered on client-side for non-owner users
     }
     
     // ============================================
     // SUPPORT TICKETS COLLECTION
     // ============================================
+    // Path: supportTickets/{ticketId}
+    // Purpose: Customer support tickets
     match /supportTickets/{ticketId} {
-      // Read access:
-      // - Users can read their own tickets
-      // - Support staff can read all tickets
+      // Read: Users can read their own tickets, support staff can read all
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isSupport()
       );
       
-      // Create access:
-      // - Authenticated users can create tickets (userId will be set from auth.uid)
+      // Create: Authenticated users can create tickets (userId must match auth.uid)
       allow create: if isAuthenticated() && 
                     request.resource.data.userId == request.auth.uid;
       
-      // Update access:
-      // - Support staff can update ticket status and other fields
-      // - Users cannot update their own tickets (only support can)
+      // Update: Only support staff can update tickets
       allow update: if isAuthenticated() && isSupport();
       
-      // Delete access:
-      // - Only support staff can delete tickets
+      // Delete: Only support staff can delete tickets
       allow delete: if isAuthenticated() && isSupport();
       
       // ============================================
       // SUPPORT TICKET MESSAGES SUBCOLLECTION
       // ============================================
+      // Path: supportTickets/{ticketId}/messages/{messageId}
+      // Purpose: Messages/replies in support tickets
       match /messages/{messageId} {
-        // Read access:
-        // - Users can read messages for their own tickets
-        // - Support staff can read messages for all tickets
+        // Read: Users can read messages for their own tickets, support can read all
         allow read: if isAuthenticated() && (
           get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
           isSupport()
         );
         
-        // Create access (reply):
-        // - Users can add messages to their own tickets
-        // - Support staff can add messages to any ticket
+        // Create: Users can reply to their own tickets, support can reply to any
         allow create: if isAuthenticated() && (
           get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
           isSupport()
         );
         
-        // Update/Delete access:
-        // - Only support staff can update/delete messages
+        // Update/Delete: Only support staff can modify messages
         allow update, delete: if isAuthenticated() && isSupport();
       }
     }
@@ -174,24 +173,22 @@ service cloud.firestore {
     // ============================================
     // VOLUNTEERS COLLECTION
     // ============================================
+    // Path: volunteers/{volunteerId}
+    // Purpose: Volunteer accounts created by organizers
     match /volunteers/{volunteerId} {
-      // Read access:
-      // - Organizers can read volunteers they created (hostUserId matches)
+      // Read: Organizers can read volunteers they created
       allow read: if isAuthenticated() && 
                   resource.data.hostUserId == request.auth.uid;
       
-      // Create access:
-      // - Organizers can create volunteers (hostUserId will be set to their uid)
+      // Create: Organizers can create volunteers (hostUserId must match auth.uid)
       allow create: if isAuthenticated() && 
                     request.resource.data.hostUserId == request.auth.uid;
       
-      // Update access:
-      // - Organizers can update volunteers they created
+      // Update: Organizers can update volunteers they created
       allow update: if isAuthenticated() && 
                     resource.data.hostUserId == request.auth.uid;
       
-      // Delete access:
-      // - Organizers can delete volunteers they created
+      // Delete: Organizers can delete volunteers they created
       allow delete: if isAuthenticated() && 
                     resource.data.hostUserId == request.auth.uid;
     }
@@ -199,37 +196,34 @@ service cloud.firestore {
     // ============================================
     // HOST ANALYTICS COLLECTION
     // ============================================
+    // Path: host_analytics/{hostId}
+    // Purpose: Aggregated analytics for each organizer (read-only from client)
     match /host_analytics/{hostId} {
-      // Read access:
-      // - Organizers can read their own analytics (hostId matches their uid)
-      // - Owner can read all analytics
+      // Read: Organizers can read their own analytics, owner can read all
       allow read: if isAuthenticated() && (
         request.auth.uid == hostId ||
         isOwner()
       );
       
-      // Write access: Backend/Cloud Functions only (no client writes)
+      // Write: Backend/Cloud Functions only (no client writes)
       allow write: if false;
     }
     
     // ============================================
     // EVENT ANALYTICS COLLECTION
     // ============================================
+    // Path: event_analytics/{eventId}
+    // Purpose: Per-event analytics (read-only from client)
     match /event_analytics/{eventId} {
-      // Read access:
-      // - Organizers can read analytics for their own events
-      //   (check if event exists and hostUserId/organizerId matches)
-      // - Owner can read all event analytics
+      // Read: Organizers can read analytics for their own events, owner can read all
       allow read: if isAuthenticated() && (
         // Check if event belongs to organizer
-        (exists(/databases/$(database)/documents/events/$(eventId)) &&
-         (get(/databases/$(database)/documents/events/$(eventId)).data.hostUserId == request.auth.uid ||
-          get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid)) ||
+        isEventOwner(eventId) ||
         // Owner can read all
         isOwner()
       );
       
-      // Write access: Backend/Cloud Functions only (no client writes)
+      // Write: Backend/Cloud Functions only (no client writes)
       allow write: if false;
     }
     

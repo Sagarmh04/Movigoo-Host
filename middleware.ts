@@ -18,6 +18,26 @@ const PUBLIC_PATHS = [
   "/robots.txt",
 ];
 
+const SUPER_ADMIN_EMAIL = "movigoo4@gmail.com";
+
+function looksLikeJwt(token: string | undefined) {
+  return typeof token === "string" && token.split(".").length === 3;
+}
+
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "===".slice((b64.length + 3) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -29,10 +49,27 @@ export async function middleware(req: NextRequest) {
   const sessionId = req.cookies.get(COOKIE_NAME_ID)?.value;
   const sessionKey = req.cookies.get(COOKIE_NAME_KEY)?.value;
 
+  console.log(`[Middleware] Accessing: ${pathname} | SessionID: ${!!sessionId}`);
+
   // If cookies missing → redirect to login immediately
   if (!sessionId || !sessionKey) {
+    if (pathname === "/") {
+      return NextResponse.next();
+    }
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Fallback mode: host_session_key holds a Firebase ID token (JWT) and host_session_id holds uid.
+  // In this mode we skip Cloud Function verification and allow the request.
+  if (looksLikeJwt(sessionKey)) {
+    const payload = decodeJwtPayload(sessionKey);
+    const email = payload?.email;
+    if (typeof email === "string" && email.toLowerCase() === SUPER_ADMIN_EMAIL) {
+      return NextResponse.next();
+    }
+
+    return NextResponse.next();
   }
 
   // Verify session with cloud function

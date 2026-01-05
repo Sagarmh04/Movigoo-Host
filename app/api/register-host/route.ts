@@ -1,6 +1,8 @@
 // /host/app/api/register-host/route.ts
 import { NextRequest } from "next/server";
 
+export const runtime = "nodejs";
+
 const CF_REGISTER_HOST =
   process.env.FIREBASE_CF_REGISTER_HOST_URL ||
   "https://registerhost-nmi75xl45a-el.a.run.app";

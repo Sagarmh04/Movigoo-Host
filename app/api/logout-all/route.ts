@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { serializeCookie } from "@/lib/cookies";
 
+export const runtime = "nodejs";
+
 const CF_LOGOUT_ALL =
   process.env.FIREBASE_CF_LOGOUT_ALL_URL ||
   "https://logoutalldevices-nmi75xl45a-el.a.run.app";

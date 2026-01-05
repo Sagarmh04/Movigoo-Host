@@ -216,7 +216,7 @@ try {
 
       toast.success(isRegister ? "Registered & logged in" : "Logged in");
       onAuthenticated?.();
-      router.push("/");
+      window.location.assign("/");
     } catch (err: any) {
       toast.error(err?.message || "Authentication failed");
     } finally {
@@ -250,7 +250,7 @@ try {
 
       await postLogin(token);
       toast.success("Signed in with Google");
-      router.push("/");
+      window.location.assign("/");
     } catch (err: any) {
       toast.error(err?.message || "Google sign-in failed");
     } finally {
@@ -351,7 +351,7 @@ try {
 
       await postLogin(token);
       toast.success("Phone sign-in success");
-      router.push("/");
+      window.location.assign("/");
     } catch (err: any) {
       toast.error(err?.message || "OTP failed");
     } finally {
