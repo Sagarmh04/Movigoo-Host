@@ -61,28 +61,33 @@ export async function computeHostStats(): Promise<HostStats> {
   // In this app, authenticated users are host users
   const hostUserId = user.uid;
 
-  // Fetch all events for this host (bookings are in subcollections: events/{eventId}/bookings)
-  const eventsQuery = query(
-    collection(db, "events"),
-    where("hostUserId", "==", hostUserId)
-  );
-  const eventsSnapshot = await getDocs(eventsQuery);
-  const events = eventsSnapshot.docs.map(doc => {
-    const data = doc.data();
-    // Extract manualPayoutPaid explicitly to ensure it's included
-    const manualPayoutPaid = typeof data.manualPayoutPaid === 'number' ? data.manualPayoutPaid : 0;
-    return {
-      id: doc.id,
-      ...data,
-      manualPayoutPaid, // Explicitly set to ensure it's always present
-    } as any; // Type assertion needed because Firestore data structure is dynamic
-  });
+  const [eventsByHostSnapshot, eventsByOrganizerSnapshot] = await Promise.all([
+    getDocs(query(collection(db, "events"), where("hostUserId", "==", hostUserId))),
+    getDocs(query(collection(db, "events"), where("organizerId", "==", hostUserId))),
+  ]);
+
+  const mergedById = new Map<string, any>();
+  for (const snap of [eventsByHostSnapshot, eventsByOrganizerSnapshot]) {
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      const manualPayoutPaid = typeof data.manualPayoutPaid === "number" ? data.manualPayoutPaid : 0;
+      mergedById.set(d.id, {
+        id: d.id,
+        ...data,
+        manualPayoutPaid,
+      });
+    });
+  }
+
+  const events = Array.from(mergedById.values());
 
   // Compute event stats
   const eventStats = computeEventStats(events);
   
   // Fetch bookings for all events
   const bookings = await fetchAllBookings(events.map(e => e.id));
+
+  console.log("Dashboard Stats - Total Bookings Found:", bookings.length);
   
   // Compute booking stats (only counts CONFIRMED bookings)
   const bookingStats = computeBookingStats(bookings, events);
@@ -228,8 +233,15 @@ function computeBookingStats(bookings: any[], events: any[]) {
     // Normalize status for case-insensitive comparison (handles "confirmed", "CONFIRMED", "Confirmed", etc.)
     const normalizedStatus = typeof status === 'string' ? status.toLowerCase().trim() : String(status).toLowerCase().trim();
     
-    // Count confirmed bookings (handles "confirmed" and "completed" statuses)
-    if (normalizedStatus === "confirmed" || normalizedStatus === "completed") {
+    // Count confirmed bookings (handles "confirmed" and other success statuses)
+    if (
+      normalizedStatus === "confirmed" ||
+      normalizedStatus === "completed" ||
+      normalizedStatus === "success" ||
+      normalizedStatus === "successful" ||
+      normalizedStatus === "succeeded" ||
+      normalizedStatus === "paid"
+    ) {
       confirmedBookings++;
       // Only count revenue and tickets for CONFIRMED bookings
       totalTicketsSold += ticketCount;

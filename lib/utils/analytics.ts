@@ -45,7 +45,9 @@ export async function getHostAnalytics(hostId: string): Promise<HostAnalytics | 
       totalRevenue: data.totalRevenue ?? 0,
       updatedAt: data.updatedAt,
     };
-    
+
+    console.log("Analytics Data Fetched:", result);
+
     // DEBUG: Log raw data from Firestore
     console.log("📄 [Analytics] Raw Firestore data:", {
       totalTicketsSold: data.totalTicketsSold,

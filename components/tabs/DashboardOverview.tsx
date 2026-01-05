@@ -97,7 +97,7 @@ export default function DashboardOverview() {
       // If analytics doc doesn't exist, show 0 instead of computed value
       const finalStats: HostStats = {
         ...computedStats,
-        totalTicketsSold: analyticsData?.totalTicketsSold ?? 0,
+        totalTicketsSold: analyticsData?.totalTicketsSold ?? computedStats.totalTicketsSold,
         totalRevenue: analyticsData?.totalRevenue ?? computedStats.totalRevenue,
       };
       
