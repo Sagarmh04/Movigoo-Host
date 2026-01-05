@@ -15,7 +15,7 @@ import {
   getDoc,
   getDocs,
   doc,
-  runTransaction,
+  setDoc,
   serverTimestamp,
   query,
   where,
