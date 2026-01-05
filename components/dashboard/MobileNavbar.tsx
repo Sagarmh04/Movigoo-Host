@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import LogoutButton from "@/components/auth/LogoutButton";
 
@@ -9,15 +10,24 @@ interface TabItem {
   label: string;
 }
 
+interface OwnerLinkItem {
+  label: string;
+  href?: string;
+  tabId?: string;
+}
+
 export default function MobileNavbar({
   tabs,
   activeTab,
   setActiveTab,
+  ownerLinks,
 }: {
   tabs: TabItem[];
   activeTab: string;
   setActiveTab: (id: string) => void;
+  ownerLinks?: OwnerLinkItem[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   return (
@@ -55,6 +65,27 @@ export default function MobileNavbar({
               {t.label}
             </button>
           ))}
+
+          {!!ownerLinks?.length && (
+            <div className="border-t bg-gray-50">
+              {ownerLinks.map((link) => (
+                <button
+                  key={link.href || link.tabId || link.label}
+                  onClick={() => {
+                    if (link.tabId) {
+                      setActiveTab(link.tabId);
+                    } else if (link.href) {
+                      router.push(link.href);
+                    }
+                    setOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 border-b text-sm font-medium text-blue-600 hover:bg-blue-50"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="px-4 py-3 border-t">
             <LogoutButton />

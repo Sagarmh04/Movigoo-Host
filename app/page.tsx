@@ -37,6 +37,7 @@ import MobileNavbar from "@/components/dashboard/MobileNavbar";
 import LogoutButton from "@/components/auth/LogoutButton";
 import KycNotification from "@/components/dashboard/KycNotification";
 import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, type User } from "firebase/auth";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -49,7 +50,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadKycStatus();
-    checkOwnerAccess();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      checkOwnerAccess(user);
+    });
     
     // Check for hash in URL to switch tabs (e.g., #support from owner panel)
     if (typeof window !== "undefined" && window.location.hash) {
@@ -58,6 +61,8 @@ export default function DashboardPage() {
         setActiveTab(hash);
       }
     }
+
+    return () => unsubscribe();
   }, []);
 
   // Refresh KYC status when switching to verification tab
@@ -92,13 +97,10 @@ export default function DashboardPage() {
     }
   };
 
-  const checkOwnerAccess = async () => {
+  const checkOwnerAccess = (user: User | null) => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const userIsOwner = user.email === OWNER_EMAIL;
-        setIsOwner(userIsOwner);
-      }
+      const userIsOwner = user?.email === OWNER_EMAIL;
+      setIsOwner(userIsOwner);
     } catch (error) {
       console.error("Error checking owner access:", error);
       // Don't set error state here to avoid breaking UI
@@ -119,6 +121,15 @@ export default function DashboardPage() {
     { id: "verification", label: "Verification", icon: ShieldCheck, component: <VerificationTab onKycStatusChange={loadKycStatus} /> },
   ];
 
+  const ownerLinks = isOwner
+    ? [
+        { label: "Owner Panel", href: "/owner/organizers" },
+        { label: "KYC Management", tabId: "verification" },
+        { label: "Manual Payouts", tabId: "payments" },
+        { label: "Support Tickets", tabId: "support" },
+      ]
+    : undefined;
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       {/* KYC Notification Banner */}
@@ -130,6 +141,7 @@ export default function DashboardPage() {
           tabs={tabs}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          ownerLinks={ownerLinks}
         />
 
         {/* Desktop Sidebar */}
@@ -166,6 +178,30 @@ export default function DashboardPage() {
                 >
                   <Shield size={18} />
                   Owner Panel
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("verification")}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-500 hover:bg-blue-500/10 transition mb-2"
+                >
+                  <ShieldCheck size={18} />
+                  KYC Management
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("payments")}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-500 hover:bg-blue-500/10 transition mb-2"
+                >
+                  <IndianRupee size={18} />
+                  Manual Payouts
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("support")}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-500 hover:bg-blue-500/10 transition"
+                >
+                  <MessageSquare size={18} />
+                  Support Tickets
                 </button>
               </>
             )}

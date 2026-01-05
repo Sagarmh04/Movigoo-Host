@@ -266,8 +266,37 @@ export default function SuperAdminOrganizersPage() {
     });
   };
 
-  const handleViewSupport = (userId: string) => {
-    router.push(`/?userId=${userId}#support`);
+  const handleViewSupport = async (userId: string) => {
+    try {
+      const ticketsRef = collection(db, "supportTickets");
+      const q = query(ticketsRef, where("userId", "==", userId));
+      const snapshot = await getDocs(q);
+
+      const tickets = snapshot.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          status: data.status as string | undefined,
+          updatedAt: data.updatedAt,
+          createdAt: data.createdAt,
+        };
+      });
+
+      tickets.sort((a, b) => {
+        const aTime = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+        const bTime = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+        return bTime - aTime;
+      });
+
+      const openTicket = tickets.find((t) => t.status === "OPEN");
+      const selectedTicketId = openTicket?.id || tickets[0]?.id;
+
+      const ticketParam = selectedTicketId ? `&ticketId=${selectedTicketId}` : "";
+      router.push(`/?userId=${userId}${ticketParam}#support`);
+    } catch (error) {
+      console.error("Error opening support chat:", error);
+      router.push(`/?userId=${userId}#support`);
+    }
   };
 
   const formatCurrency = (amount: number) => {

@@ -20,6 +20,10 @@ const PUBLIC_PATHS = [
 
 const SUPER_ADMIN_EMAIL = "movigoo4@gmail.com";
 
+const OWNER_PATHS = [
+  "/owner",
+];
+
 function looksLikeJwt(token: string | undefined) {
   return typeof token === "string" && token.split(".").length === 3;
 }
@@ -43,6 +47,12 @@ export async function middleware(req: NextRequest) {
 
   // Allow public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // Owner panel is additionally protected inside the page itself (email check).
+  // We allow the request through here to prevent middleware session gating from blocking the owner.
+  if (OWNER_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
