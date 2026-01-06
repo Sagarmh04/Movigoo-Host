@@ -9,24 +9,30 @@ const db = admin.firestore();
 
 /**
  * 🤖 HOST & EVENT ANALYTICS SYNC
- * Trigger: When a new booking is written to Firestore.
+ * Trigger: When a booking is created or updated in the ROOT 'bookings' collection.
+ * Path: bookings/{bookingId}
+ * 
  * Logic:
- * 1. Checks if the booking is "confirmed" or "success".
- * 2. Atomically increments 'totalRevenue' and 'totalTicketsSold'.
- * 3. Updates BOTH 'host_analytics' (Global) and 'event_analytics' (Per Event).
+ * 1. Extracts eventId and hostUid from the booking document data.
+ * 2. Checks if the booking status is "confirmed" or "success".
+ * 3. Atomically increments 'totalRevenue' and 'totalTicketsSold'.
+ * 4. Updates BOTH 'host_analytics/{hostUid}' and 'event_analytics/{eventId}'.
  */
 exports.syncAnalyticsOnBooking = functions.firestore
-  .document('events/{eventId}/bookings/{bookingId}')
+  .document('bookings/{bookingId}')
   .onWrite(async (change, context) => {
     const bookingData = change.after.exists ? change.after.data() : null;
     const previousData = change.before.exists ? change.before.data() : null;
-    const { eventId } = context.params;
+    const { bookingId } = context.params;
 
     // 1. SECURITY CHECKS
-    // If document was deleted, we might want to decrement (Optional, skipping for safety)
-    if (!bookingData) return null;
+    // If document was deleted, skip (we don't decrement for safety)
+    if (!bookingData) {
+      console.log(`⏭️ [Analytics] Booking ${bookingId} deleted, skipping analytics update`);
+      return null;
+    }
 
-    // Check if status is valid (Customize these strings based on your app)
+    // Check if status is valid
     const validStatuses = ["confirmed", "success", "paid", "successful"];
     const isNowConfirmed = validStatuses.includes(bookingData.status?.toLowerCase());
     const wasConfirmed = previousData && validStatuses.includes(previousData.status?.toLowerCase());
@@ -35,24 +41,43 @@ exports.syncAnalyticsOnBooking = functions.firestore
     // A. It's a new confirmed booking
     // B. An existing booking JUST changed status to confirmed
     if (!isNowConfirmed || wasConfirmed) {
-      return null; // Skip if already counted or not valid
-    }
-
-    // FIX: Handle both 'hostId' and 'hostUid' field names
-    // The app uses 'hostUid' in some places but this function originally expected 'hostId'
-    const hostId = bookingData.hostId || bookingData.hostUid;
-    const ticketCount = Number(bookingData.quantity || bookingData.tickets || 1);
-    const revenue = Number(bookingData.amount || bookingData.totalPrice || bookingData.total || 0);
-
-    if (!hostId) {
-      console.error(`❌ [Analytics] Missing hostId/hostUid for booking ${context.params.bookingId}`);
-      console.error(`❌ [Analytics] Booking data:`, bookingData);
+      console.log(`⏭️ [Analytics] Booking ${bookingId} status not confirmed or already counted, skipping`);
       return null;
     }
 
-    console.log(`⚙️ [Analytics] Processing Booking: ${context.params.bookingId} for Host: ${hostId}`);
+    // 2. EXTRACT DATA FROM BOOKING DOCUMENT
+    // Extract hostId (using hostUid with hostId as fallback)
+    const hostId = bookingData.hostUid || bookingData.hostId;
+    
+    // Extract eventId from document data (not from URL params)
+    const eventId = bookingData.eventId;
+    
+    // Extract revenue and ticket count
+    const ticketCount = Number(bookingData.quantity || bookingData.tickets || 1);
+    const revenue = Number(bookingData.amount || bookingData.totalPrice || bookingData.total || 0);
 
-    // 2. PREPARE ATOMIC UPDATES
+    // 3. VALIDATION
+    if (!hostId) {
+      console.error(`❌ [Analytics] Missing hostUid/hostId for booking ${bookingId}`);
+      console.error(`❌ [Analytics] Booking data:`, JSON.stringify(bookingData, null, 2));
+      return null;
+    }
+
+    if (!eventId) {
+      console.error(`❌ [Analytics] Missing eventId for booking ${bookingId}`);
+      console.error(`❌ [Analytics] Booking data:`, JSON.stringify(bookingData, null, 2));
+      return null;
+    }
+
+    console.log(`⚙️ [Analytics] Processing Booking ${bookingId}:`, {
+      hostId,
+      eventId,
+      revenue,
+      ticketCount,
+      status: bookingData.status
+    });
+
+    // 4. PREPARE ATOMIC UPDATES
     const batch = db.batch();
 
     // A. Reference Global Host Analytics
@@ -61,7 +86,7 @@ exports.syncAnalyticsOnBooking = functions.firestore
     // B. Reference Specific Event Analytics
     const eventStatsRef = db.collection('event_analytics').doc(eventId);
 
-    // 3. EXECUTE UPDATES
+    // 5. EXECUTE UPDATES
     // We use 'merge: true' via set() to create docs if they don't exist
     batch.set(hostRef, {
       totalRevenue: admin.firestore.FieldValue.increment(revenue),
@@ -78,11 +103,13 @@ exports.syncAnalyticsOnBooking = functions.firestore
       hostId: hostId
     }, { merge: true });
 
-    // 4. COMMIT TO DATABASE
+    // 6. COMMIT TO DATABASE
     try {
       await batch.commit();
-      console.log(`✅ [Analytics] Successfully synced for Host ${hostId} (+₹${revenue})`);
+      console.log(`✅ [Analytics] Successfully synced for Host ${hostId}, Event ${eventId} (+₹${revenue}, +${ticketCount} tickets)`);
     } catch (error) {
-      console.error("❌ [Analytics] Transaction failed:", error);
+      console.error(`❌ [Analytics] Transaction failed for booking ${bookingId}:`, error);
     }
+
+    return null;
   });
