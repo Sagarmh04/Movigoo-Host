@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { CalendarCheck, IndianRupee, Users, Ticket, TrendingUp, BarChart3, Loader2, DollarSign } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { CalendarCheck, IndianRupee, Loader2, DollarSign } from "lucide-react";
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
 import { getCurrentHostAnalytics } from "@/lib/utils/analytics";
 import { auth } from "@/lib/firebase";
@@ -16,6 +16,10 @@ export default function DashboardOverview() {
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paidTotal, setPaidTotal] = useState(0);
+  const [realTimeTotalBookings, setRealTimeTotalBookings] = useState(0);
+  const [realTimeGrossRevenue, setRealTimeGrossRevenue] = useState(0);
+  const bookingAggRef = useRef(new Map<string, { totalBookings: number; grossRevenue: number }>());
+  const bookingUnsubsRef = useRef(new Map<string, () => void>());
 
   // Wait for auth state to be ready
   useEffect(() => {
@@ -31,6 +35,140 @@ export default function DashboardOverview() {
     if (!user?.uid) {
       return;
     }
+
+    const normalizeStatus = (status: unknown) => {
+      if (typeof status === "string") {
+        return status.toLowerCase().trim();
+      }
+      return String(status ?? "").toLowerCase().trim();
+    };
+
+    const isConfirmedStatus = (normalizedStatus: string) => {
+      return (
+        normalizedStatus === "confirmed" ||
+        normalizedStatus === "completed" ||
+        normalizedStatus === "success" ||
+        normalizedStatus === "successful" ||
+        normalizedStatus === "succeeded" ||
+        normalizedStatus === "paid"
+      );
+    };
+
+    const parseAmount = (value: unknown) => {
+      if (typeof value === "number") {
+        return Number.isFinite(value) ? value : 0;
+      }
+      if (typeof value === "string") {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+      }
+      return 0;
+    };
+
+    const recomputeRealTimeTotals = () => {
+      let totalBookings = 0;
+      let grossRevenue = 0;
+
+      bookingAggRef.current.forEach((v) => {
+        totalBookings += v.totalBookings;
+        grossRevenue += v.grossRevenue;
+      });
+
+      setRealTimeTotalBookings(totalBookings);
+      setRealTimeGrossRevenue(grossRevenue);
+    };
+
+    const syncBookingListeners = (eventIds: string[]) => {
+      const nextSet = new Set(eventIds);
+
+      Array.from(bookingUnsubsRef.current.entries()).forEach(([eventId, unsub]) => {
+        if (!nextSet.has(eventId)) {
+          unsub();
+          bookingUnsubsRef.current.delete(eventId);
+          bookingAggRef.current.delete(eventId);
+        }
+      });
+
+      Array.from(nextSet.values()).forEach((eventId) => {
+        if (bookingUnsubsRef.current.has(eventId)) {
+          return;
+        }
+
+        const bookingsRef = collection(db, "events", eventId, "bookings");
+        const unsub = onSnapshot(
+          bookingsRef,
+          (snapshot) => {
+            let totalBookings = 0;
+            let grossRevenue = 0;
+
+            snapshot.forEach((d) => {
+              const data = d.data() as any;
+              const normalizedStatus = normalizeStatus(data?.status);
+              if (!normalizedStatus) {
+                return;
+              }
+              if (!isConfirmedStatus(normalizedStatus)) {
+                return;
+              }
+
+              const amount = parseAmount(data?.amount ?? data?.total);
+              grossRevenue += amount;
+              totalBookings += 1;
+            });
+
+            bookingAggRef.current.set(eventId, {
+              totalBookings,
+              grossRevenue,
+            });
+            recomputeRealTimeTotals();
+          },
+          (err) => {
+            console.error(`Error listening to bookings for event ${eventId}:`, err);
+          }
+        );
+
+        bookingUnsubsRef.current.set(eventId, unsub);
+      });
+
+      recomputeRealTimeTotals();
+    };
+
+    let hostEventIds = new Set<string>();
+    let organizerEventIds = new Set<string>();
+
+    const recomputeEventIds = () => {
+      const merged = new Set<string>([
+        ...Array.from(hostEventIds.values()),
+        ...Array.from(organizerEventIds.values()),
+      ]);
+      syncBookingListeners(Array.from(merged));
+    };
+
+    const eventsRef = collection(db, "events");
+    const qHost = query(eventsRef, where("hostUserId", "==", user.uid));
+    const qOrganizer = query(eventsRef, where("organizerId", "==", user.uid));
+
+    const unsubHost = onSnapshot(
+      qHost,
+      (snapshot) => {
+        hostEventIds = new Set(snapshot.docs.map((d) => d.id));
+        recomputeEventIds();
+      },
+      (err) => {
+        console.error("Error listening to host events:", err);
+      }
+    );
+
+    const unsubOrganizer = onSnapshot(
+      qOrganizer,
+      (snapshot) => {
+        organizerEventIds = new Set(snapshot.docs.map((d) => d.id));
+        recomputeEventIds();
+      },
+      (err) => {
+        console.error("Error listening to organizer events:", err);
+      }
+    );
 
     const payoutsRef = collection(db, "payouts");
     const q = query(payoutsRef, where("organizerId", "==", user.uid));
@@ -58,7 +196,14 @@ export default function DashboardOverview() {
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubHost();
+      unsubOrganizer();
+      bookingUnsubsRef.current.forEach((unsub) => unsub());
+      bookingUnsubsRef.current.clear();
+      bookingAggRef.current.clear();
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   // Load stats only after auth is ready
@@ -240,16 +385,8 @@ export default function DashboardOverview() {
     revenueLastMonth: 0,
   };
 
-  const revenueChange = displayStats.revenueLastMonth > 0
-    ? ((displayStats.revenueThisMonth - displayStats.revenueLastMonth) / displayStats.revenueLastMonth) * 100
-    : 0;
-
-  const bookingsChange = displayStats.bookingsLastMonth > 0
-    ? ((displayStats.bookingsThisMonth - displayStats.bookingsLastMonth) / displayStats.bookingsLastMonth) * 100
-    : 0;
-
-  const netEarnings = displayStats.totalRevenue * 0.95;
-  const pendingManualPayout = Math.max(0, netEarnings - paidTotal);
+  const netShare = realTimeGrossRevenue * 0.95;
+  const pendingPayout = Math.max(0, netShare - paidTotal);
 
   return (
     <div className="space-y-6">
@@ -261,15 +398,12 @@ export default function DashboardOverview() {
       </div>
 
       {/* Primary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Total Bookings</p>
-              <h2 className="text-3xl font-bold mt-2">{displayStats.confirmedBookings}</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                Confirmed bookings only
-              </p>
+              <h2 className="text-3xl font-bold mt-2">{realTimeTotalBookings}</h2>
             </div>
             <CalendarCheck className="h-8 w-8 text-blue-500" />
           </div>
@@ -278,11 +412,8 @@ export default function DashboardOverview() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Gross Revenue (Before Payout)</p>
-              <h2 className="text-3xl font-bold mt-2">{formatCurrency(displayStats.totalRevenue)}</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                {formatCurrency(displayStats.revenueThisMonth)} this month
-              </p>
+              <p className="text-gray-500 text-sm">Gross Revenue</p>
+              <h2 className="text-3xl font-bold mt-2">{formatCurrency(realTimeGrossRevenue)}</h2>
               <p className="text-xs text-gray-500 mt-2 italic">
                 Payouts are processed manually by Movigoo after event completion.
               </p>
@@ -301,24 +432,17 @@ export default function DashboardOverview() {
                 {formatCurrency(paidTotal || 0)}
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                ( <button
+                <button
                   type="button"
                   onClick={() => {
                     if (typeof window !== "undefined") {
                       window.location.hash = "payments";
                     }
                   }}
-                  className="text-primary hover:underline"
+                  className="text-blue-600 hover:underline"
                 >
-                  Click here
-                </button> to view payout history )
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {pendingManualPayout > 0 ? (
-                  <span className="text-orange-600 font-medium">Pending Manual Payout: {formatCurrency(pendingManualPayout)}</span>
-                ) : (
-                  <span className="text-green-600 font-medium">✓ Paid</span>
-                )}
+                  Click here to view payout history
+                </button>
               </p>
             </div>
             <DollarSign className="h-8 w-8 text-blue-500" />
@@ -328,26 +452,17 @@ export default function DashboardOverview() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Upcoming Events</p>
-              <h2 className="text-3xl font-bold mt-2">{displayStats.upcomingEvents}</h2>
+              <p className="text-gray-500 text-sm">Pending Payout</p>
+              <h2 className={`text-3xl font-bold mt-2 ${
+                pendingPayout > 0 ? "text-orange-600" : "text-green-600"
+              }`}>
+                {formatCurrency(pendingPayout)}
+              </h2>
               <p className="text-xs text-gray-400 mt-1">
-                {displayStats.activeEvents} active
+                Net share: {formatCurrency(netShare)}
               </p>
             </div>
-            <BarChart3 className="h-8 w-8 text-purple-500" />
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm">Tickets Sold</p>
-              <h2 className="text-3xl font-bold mt-2">{displayStats.totalTicketsSold}</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                {displayStats.occupancyRate.toFixed(1)}% occupancy
-              </p>
-            </div>
-            <Ticket className="h-8 w-8 text-orange-500" />
+            <IndianRupee className="h-8 w-8 text-orange-500" />
           </div>
         </div>
       </div>
@@ -362,51 +477,6 @@ export default function DashboardOverview() {
             <span className="text-gray-400">•</span>
             <span className="text-gray-600">{displayStats.draftEvents} drafts</span>
           </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Unique Customers</p>
-          <h3 className="text-2xl font-bold mt-2">{displayStats.uniqueCustomers}</h3>
-          <p className="text-xs text-gray-400 mt-1">
-            {displayStats.totalCustomers} total bookings
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Average Ticket Price</p>
-          <h3 className="text-2xl font-bold mt-2">{formatCurrency(displayStats.averageTicketPrice)}</h3>
-          <p className="text-xs text-gray-400 mt-1">
-            Across all events
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Ticket Capacity</p>
-          <h3 className="text-2xl font-bold mt-2">{displayStats.totalTicketCapacity}</h3>
-          <p className="text-xs text-gray-400 mt-1">
-            {displayStats.ticketsRemaining} remaining
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Avg Bookings/Event</p>
-          <h3 className="text-2xl font-bold mt-2">{displayStats.averageBookingsPerEvent.toFixed(1)}</h3>
-          <p className="text-xs text-gray-400 mt-1">
-            Average performance
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Monthly Growth</p>
-          <div className="flex items-center gap-2 mt-2">
-            <TrendingUp className={`h-5 w-5 ${revenueChange >= 0 ? "text-green-500" : "text-red-500"}`} />
-            <h3 className={`text-2xl font-bold ${revenueChange >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {revenueChange >= 0 ? "+" : ""}{revenueChange.toFixed(1)}%
-            </h3>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">
-            Gross revenue vs last month
-          </p>
         </div>
       </div>
 
