@@ -492,18 +492,24 @@ export default function DashboardOverview() {
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-900">Analytics Summary</h2>
+          {/* HIDDEN: UID and Collection Source 
           <span className="text-xs text-gray-400">UID: {user?.uid || "Not logged in"}</span>
+          */}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <p className="text-gray-600 text-sm mb-1">Total Tickets Sold (Analytics)</p>
-            <h3 className="text-3xl font-bold text-blue-600">{analyticsTicketsSold}</h3>
-            <p className="text-xs text-gray-500 mt-1">From host_analytics collection</p>
+          <div className="analytics-card">
+            <h3 className="text-gray-600 text-sm mb-1">Total Tickets Sold (Analytics)</h3>
+            {/* Only showing the number */}
+            <p className="analytics-value text-3xl font-bold text-blue-600">
+              {analyticsTicketsSold || 0}
+            </p>
           </div>
-          <div>
-            <p className="text-gray-600 text-sm mb-1">Total Revenue (Analytics)</p>
-            <h3 className="text-3xl font-bold text-green-600">{formatCurrency(analyticsRevenue)}</h3>
-            <p className="text-xs text-gray-500 mt-1">From host_analytics collection</p>
+          <div className="analytics-card">
+            <h3 className="text-gray-600 text-sm mb-1">Total Revenue (Analytics)</h3>
+            {/* Only showing the price */}
+            <p className="analytics-value text-3xl font-bold text-green-600">
+              ₹{analyticsRevenue || 0}
+            </p>
           </div>
         </div>
       </div>
