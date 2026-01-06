@@ -70,6 +70,7 @@ export async function createSupportTicket(
     await addDoc(collection(db, "supportTickets", ticketRef.id, "messages"), {
       sender: "USER",
       message: data.description,
+      ticketOwnerId: user.uid,
       createdAt: serverTimestamp(),
     });
   } catch (messageError) {
