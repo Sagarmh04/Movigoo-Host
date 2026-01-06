@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { CalendarCheck, IndianRupee, Loader2, DollarSign } from "lucide-react";
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
-import { getCurrentHostAnalytics } from "@/lib/utils/analytics";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function DashboardOverview() {
@@ -18,6 +17,8 @@ export default function DashboardOverview() {
   const [paidTotal, setPaidTotal] = useState(0);
   const [realTimeTotalBookings, setRealTimeTotalBookings] = useState(0);
   const [realTimeGrossRevenue, setRealTimeGrossRevenue] = useState(0);
+  const [analyticsTicketsSold, setAnalyticsTicketsSold] = useState<number>(0);
+  const [analyticsRevenue, setAnalyticsRevenue] = useState<number>(0);
   const bookingAggRef = useRef(new Map<string, { totalBookings: number; grossRevenue: number }>());
   const bookingUnsubsRef = useRef(new Map<string, () => void>());
 
@@ -173,7 +174,7 @@ export default function DashboardOverview() {
     const payoutsRef = collection(db, "payouts");
     const q = query(payoutsRef, where("organizerId", "==", user.uid));
 
-    const unsubscribe = onSnapshot(
+    const unsubPayouts = onSnapshot(
       q,
       (snapshot) => {
         let sum = 0;
@@ -196,13 +197,39 @@ export default function DashboardOverview() {
       }
     );
 
+    // Listen to host_analytics document for real-time updates
+    const analyticsDocRef = doc(db, "host_analytics", user.uid);
+    const unsubAnalytics = onSnapshot(
+      analyticsDocRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          console.log("📊 [Analytics] Real-time update:", {
+            totalTicketsSold: data.totalTicketsSold,
+            totalRevenue: data.totalRevenue,
+            updatedAt: data.updatedAt,
+          });
+          setAnalyticsTicketsSold(data.totalTicketsSold ?? 0);
+          setAnalyticsRevenue(data.totalRevenue ?? 0);
+        } else {
+          console.warn("⚠️ [Analytics] Document does not exist for user:", user.uid);
+          setAnalyticsTicketsSold(0);
+          setAnalyticsRevenue(0);
+        }
+      },
+      (err) => {
+        console.error("❌ [Analytics] Error listening to host_analytics:", err);
+      }
+    );
+
     return () => {
       unsubHost();
       unsubOrganizer();
       bookingUnsubsRef.current.forEach((unsub) => unsub());
       bookingUnsubsRef.current.clear();
       bookingAggRef.current.clear();
-      unsubscribe();
+      unsubPayouts();
+      unsubAnalytics();
     };
   }, [user?.uid]);
 
@@ -245,53 +272,16 @@ export default function DashboardOverview() {
         return;
       }
 
-      const hostId = user.uid;
-      const analyticsDocPath = `host_analytics/${hostId}`;
-      
-      // DEBUG: Log auth and path info
-      console.log("🔍 [Analytics Debug] Reading analytics:", {
-        hostId,
-        analyticsDocPath,
-        userEmail: user.email,
-      });
-      
-      // Load analytics from host_analytics collection (analytics collections ONLY)
-      let analyticsData = null;
-      try {
-        analyticsData = await getCurrentHostAnalytics();
-        
-        // DEBUG: Log fetched analytics values
-        console.log("✅ [Analytics Debug] Fetched analytics data:", {
-          totalTicketsSold: analyticsData?.totalTicketsSold,
-          totalRevenue: analyticsData?.totalRevenue,
-          updatedAt: analyticsData?.updatedAt,
-          docExists: analyticsData !== null,
-        });
-      } catch (analyticsError) {
-        console.error("❌ [Analytics Debug] Error loading analytics:", analyticsError);
-        // Continue with computed stats even if analytics fails
-      }
+      console.log("📊 [Dashboard] Loading computed stats for user:", user.uid);
       
       // Load computed stats for other metrics (events, bookings, etc.)
+      // Analytics data (totalTicketsSold, totalRevenue) comes from real-time listener
       const computedStats = await computeHostStats();
       
-      // Override totalTicketsSold and totalRevenue with analytics data (if available)
-      // If analytics doc doesn't exist, show 0 instead of computed value
-      const finalStats: HostStats = {
-        ...computedStats,
-        totalTicketsSold: analyticsData?.totalTicketsSold ?? computedStats.totalTicketsSold,
-        totalRevenue: analyticsData?.totalRevenue ?? computedStats.totalRevenue,
-      };
+      // Set stats (analytics values are updated separately via onSnapshot)
+      setStats(computedStats);
       
-      // DEBUG: Log final state values
-      console.log("📊 [Analytics Debug] Final stats state:", {
-        totalTicketsSold: finalStats.totalTicketsSold,
-        totalRevenue: finalStats.totalRevenue,
-        source: analyticsData ? "analytics" : "computed",
-      });
-      
-      // Force state update
-      setStats(finalStats);
+      console.log("✅ [Dashboard] Stats loaded successfully");
     } catch (err: any) {
       console.error("Error loading stats:", err);
       // Only show error if it's not an auth error (auth errors are handled above)
@@ -463,6 +453,23 @@ export default function DashboardOverview() {
               </p>
             </div>
             <IndianRupee className="h-8 w-8 text-orange-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* Analytics Stats from host_analytics collection */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Analytics Summary</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <p className="text-gray-600 text-sm mb-1">Total Tickets Sold (Analytics)</p>
+            <h3 className="text-3xl font-bold text-blue-600">{analyticsTicketsSold}</h3>
+            <p className="text-xs text-gray-500 mt-1">From host_analytics collection</p>
+          </div>
+          <div>
+            <p className="text-gray-600 text-sm mb-1">Total Revenue (Analytics)</p>
+            <h3 className="text-3xl font-bold text-green-600">{formatCurrency(analyticsRevenue)}</h3>
+            <p className="text-xs text-gray-500 mt-1">From host_analytics collection</p>
           </div>
         </div>
       </div>
