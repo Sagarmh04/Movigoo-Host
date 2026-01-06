@@ -38,12 +38,15 @@ exports.syncAnalyticsOnBooking = functions.firestore
       return null; // Skip if already counted or not valid
     }
 
-    const hostId = bookingData.hostId;
+    // FIX: Handle both 'hostId' and 'hostUid' field names
+    // The app uses 'hostUid' in some places but this function originally expected 'hostId'
+    const hostId = bookingData.hostId || bookingData.hostUid;
     const ticketCount = Number(bookingData.quantity || bookingData.tickets || 1);
     const revenue = Number(bookingData.amount || bookingData.totalPrice || bookingData.total || 0);
 
     if (!hostId) {
-      console.error(`❌ [Analytics] Missing hostId for booking ${context.params.bookingId}`);
+      console.error(`❌ [Analytics] Missing hostId/hostUid for booking ${context.params.bookingId}`);
+      console.error(`❌ [Analytics] Booking data:`, bookingData);
       return null;
     }
 
