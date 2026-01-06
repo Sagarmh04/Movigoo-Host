@@ -62,14 +62,21 @@ export async function createSupportTicket(
     updatedAt: serverTimestamp(),
   };
 
+  // Create ticket document first and wait for it to complete
   const ticketRef = await addDoc(collection(db, "supportTickets"), ticketData);
 
-  // Add initial message (description)
-  await addDoc(collection(db, "supportTickets", ticketRef.id, "messages"), {
-    sender: "USER",
-    message: data.description,
-    createdAt: serverTimestamp(),
-  });
+  // Only after ticket is fully created, add the initial message to the sub-collection
+  try {
+    await addDoc(collection(db, "supportTickets", ticketRef.id, "messages"), {
+      sender: "USER",
+      message: data.description,
+      createdAt: serverTimestamp(),
+    });
+  } catch (messageError) {
+    // If message creation fails, we still have the ticket, so log the error but don't fail the whole operation
+    console.error("Failed to add initial message to ticket:", messageError);
+    // Optionally, you could delete the ticket here if you want to ensure atomicity
+  }
 
   // Send email notification to support
   await sendTicketCreatedEmail(ticketId, ticketData);
