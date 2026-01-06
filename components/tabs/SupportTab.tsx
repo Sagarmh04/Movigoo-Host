@@ -58,15 +58,22 @@ export default function SupportTab() {
       if (targetUserId && userIsSupport) {
         // Fetch tickets for specific user
         const ticketsRef = collection(db, "supportTickets");
-        const q = query(ticketsRef, where("userId", "==", targetUserId));
-        const snapshot = await getDocs(q);
-        
-        ticketsList = snapshot.docs.map((doc) => {
-          const data = doc.data();
+        const [hostSnapshot, legacySnapshot] = await Promise.all([
+          getDocs(query(ticketsRef, where("hostId", "==", targetUserId))),
+          getDocs(query(ticketsRef, where("userId", "==", targetUserId))),
+        ]);
+
+        const mergedById = new Map<string, any>();
+        hostSnapshot.docs.forEach((d) => mergedById.set(d.id, d.data()));
+        legacySnapshot.docs.forEach((d) => mergedById.set(d.id, d.data()));
+
+        ticketsList = Array.from(mergedById.entries()).map(([id, data]) => {
           return {
-            id: doc.id,
+            id,
             ticketId: data.ticketId,
             userId: data.userId,
+            hostId: data.hostId,
+            creatorId: data.creatorId,
             userEmail: data.userEmail,
             userName: data.userName,
             category: data.category,

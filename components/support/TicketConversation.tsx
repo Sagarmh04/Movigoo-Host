@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SupportTicket, SupportMessage, TicketStatus } from "@/lib/types/support";
-import { getTicketMessages, replyToTicket, updateTicketStatus } from "@/lib/api/support";
+import { replyToTicket, updateTicketStatus } from "@/lib/api/support";
 import { Send, User, Headphones, Clock, Tag, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 
 interface TicketConversationProps {
   ticket: SupportTicket;
@@ -33,26 +35,40 @@ export default function TicketConversation({
   }, []);
 
   useEffect(() => {
-    loadMessages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoading(true);
+
+    const messagesRef = collection(db, "supportTickets", ticket.id, "messages");
+    const q = query(messagesRef, orderBy("createdAt", "asc"));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const nextMessages: SupportMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          nextMessages.push({
+            id: docSnap.id,
+            sender: data.sender,
+            message: data.message,
+            createdAt: data.createdAt,
+          });
+        });
+        setMessages(nextMessages);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error listening to messages:", error);
+        toast.error("Failed to load messages");
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [ticket.id]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  const loadMessages = async () => {
-    setLoading(true);
-    try {
-      const msgs = await getTicketMessages(ticket.id);
-      setMessages(msgs);
-    } catch (error: any) {
-      console.error("Error loading messages:", error);
-      toast.error("Failed to load messages");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,7 +89,6 @@ export default function TicketConversation({
       const sender = isSupport ? "SUPPORT" : "USER";
       await replyToTicket(ticket.id, newMessage.trim(), sender);
       setNewMessage("");
-      await loadMessages();
       onTicketUpdated();
       toast.success("Reply sent successfully");
     } catch (error: any) {
@@ -96,9 +111,10 @@ export default function TicketConversation({
   };
 
   // Determine if current user can reply
+  const ownerId = ticket.hostId ?? ticket.creatorId ?? ticket.userId;
   const canReply =
     ticket.status !== "CLOSED" &&
-    (ticket.userId === currentUserId || isSupport);
+    (ownerId === currentUserId || isSupport);
 
   const getStatusBadge = (status: TicketStatus) => {
     const styles = {

@@ -49,6 +49,8 @@ export async function createSupportTicket(
   const ticketData = {
     ticketId,
     userId: user.uid,
+    hostId: user.uid,
+    creatorId: user.uid,
     userEmail: user.email || "",
     userName,
     category: data.category,
@@ -81,21 +83,26 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
   if (!user) throw new Error("User not authenticated");
 
   const ticketsRef = collection(db, "supportTickets");
-  // Remove orderBy to avoid index requirement - sort client-side instead
-  const q = query(
-    ticketsRef,
-    where("userId", "==", user.uid)
-  );
+  const [hostSnapshot, legacySnapshot] = await Promise.all([
+    getDocs(query(ticketsRef, where("hostId", "==", user.uid))),
+    getDocs(query(ticketsRef, where("userId", "==", user.uid))),
+  ]);
 
-  const snapshot = await getDocs(q);
+  const mergedById = new Map<string, any>();
+  for (const snap of [hostSnapshot, legacySnapshot]) {
+    snap.docs.forEach((d) => {
+      mergedById.set(d.id, d.data());
+    });
+  }
+
   const tickets: SupportTicket[] = [];
-
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
+  Array.from(mergedById.entries()).forEach(([id, data]) => {
     tickets.push({
-      id: docSnap.id,
+      id,
       ticketId: data.ticketId,
       userId: data.userId,
+      hostId: data.hostId,
+      creatorId: data.creatorId,
       userEmail: data.userEmail,
       userName: data.userName,
       category: data.category,
@@ -106,7 +113,7 @@ export async function getUserTickets(): Promise<SupportTicket[]> {
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     });
-  }
+  });
 
   // Sort by updatedAt descending (client-side to avoid index requirement)
   tickets.sort((a, b) => {
@@ -166,6 +173,8 @@ export async function getAllTickets(): Promise<SupportTicket[]> {
       id: docSnap.id,
       ticketId: data.ticketId,
       userId: data.userId,
+      hostId: data.hostId,
+      creatorId: data.creatorId,
       userEmail: data.userEmail,
       userName: data.userName,
       category: data.category,
@@ -228,7 +237,8 @@ export async function replyToTicket(
   const isSupport = SUPPORT_EMAILS.includes(user.email ?? "");
 
   // Check if user owns ticket or is support
-  if (ticketData.userId !== user.uid && !isSupport) {
+  const ownerId = ticketData.hostId ?? ticketData.creatorId ?? ticketData.userId;
+  if (ownerId !== user.uid && !isSupport) {
     throw new Error("Unauthorized");
   }
 
@@ -296,7 +306,8 @@ export async function getTicketDetails(
   const isSupport = SUPPORT_EMAILS.includes(user.email ?? "");
 
   // Check access
-  if (data.userId !== user.uid && !isSupport) {
+  const ownerId = data.hostId ?? data.creatorId ?? data.userId;
+  if (ownerId !== user.uid && !isSupport) {
     throw new Error("Unauthorized");
   }
 
@@ -304,6 +315,8 @@ export async function getTicketDetails(
     id: ticketSnap.id,
     ticketId: data.ticketId,
     userId: data.userId,
+    hostId: data.hostId,
+    creatorId: data.creatorId,
     userEmail: data.userEmail,
     userName: data.userName,
     category: data.category,

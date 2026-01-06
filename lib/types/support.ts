@@ -8,6 +8,8 @@ export interface SupportTicket {
   id: string;
   ticketId: string; // SUP-10231
   userId: string;
+  hostId?: string;
+  creatorId?: string;
   userEmail: string;
   userName: string;
   
