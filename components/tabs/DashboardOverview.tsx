@@ -199,26 +199,57 @@ export default function DashboardOverview() {
 
     // Listen to host_analytics document for real-time updates
     const analyticsDocRef = doc(db, "host_analytics", user.uid);
+    console.log("🔍 [Analytics] Setting up listener for:", `host_analytics/${user.uid}`);
+    
     const unsubAnalytics = onSnapshot(
       analyticsDocRef,
       (docSnapshot) => {
+        console.log("📡 [Analytics] Snapshot received. Exists:", docSnapshot.exists());
+        
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
-          console.log("📊 [Analytics] Real-time update:", {
-            totalTicketsSold: data.totalTicketsSold,
-            totalRevenue: data.totalRevenue,
-            updatedAt: data.updatedAt,
+          
+          // DEBUG: Log ALL fields from the document
+          console.log("📄 [Analytics] Raw document data:", data);
+          console.log("📄 [Analytics] All field names:", Object.keys(data));
+          
+          // DEBUG: Log specific field values
+          console.log("📊 [Analytics] Field mapping:", {
+            "data.totalTicketsSold": data.totalTicketsSold,
+            "data.totalRevenue": data.totalRevenue,
+            "data.updatedAt": data.updatedAt,
+            "typeof totalTicketsSold": typeof data.totalTicketsSold,
+            "typeof totalRevenue": typeof data.totalRevenue,
           });
+          
           setAnalyticsTicketsSold(data.totalTicketsSold ?? 0);
           setAnalyticsRevenue(data.totalRevenue ?? 0);
+          
+          console.log("✅ [Analytics] State updated:", {
+            ticketsSold: data.totalTicketsSold ?? 0,
+            revenue: data.totalRevenue ?? 0,
+          });
         } else {
-          console.warn("⚠️ [Analytics] Document does not exist for user:", user.uid);
+          console.warn("⚠️ [Analytics] Document does not exist:", `host_analytics/${user.uid}`);
+          console.warn("⚠️ [Analytics] Check if document exists in Firestore Console");
           setAnalyticsTicketsSold(0);
           setAnalyticsRevenue(0);
         }
       },
       (err) => {
         console.error("❌ [Analytics] Error listening to host_analytics:", err);
+        console.error("❌ [Analytics] Error code:", err.code);
+        console.error("❌ [Analytics] Error message:", err.message);
+        
+        if (err.code === "permission-denied") {
+          console.error("🚫 [Analytics] PERMISSION DENIED - Check Firestore rules for host_analytics");
+          console.error("🚫 [Analytics] Required rule:");
+          console.error(`
+            match /host_analytics/{userId} {
+              allow read: if request.auth != null && request.auth.uid == userId;
+            }
+          `);
+        }
       }
     );
 
@@ -459,7 +490,10 @@ export default function DashboardOverview() {
 
       {/* Analytics Stats from host_analytics collection */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Analytics Summary</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Analytics Summary</h2>
+          <span className="text-xs text-gray-400">UID: {user?.uid || "Not logged in"}</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <p className="text-gray-600 text-sm mb-1">Total Tickets Sold (Analytics)</p>
