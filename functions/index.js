@@ -68,7 +68,7 @@ exports.analyticsRoot = functions.firestore
       hostId: hostId
     }, { merge: true });
 
-    // 5. UPDATE EVENT ANALYTICS
+    // 5. UPDATE EVENT ANALYTICS (Graphs)
     if (eventId) {
       const eventStatsRef = db.collection('event_analytics').doc(eventId);
       batch.set(eventStatsRef, {
@@ -78,8 +78,16 @@ exports.analyticsRoot = functions.firestore
         eventId: eventId,
         hostId: hostId
       }, { merge: true });
+
+      // 6. ✅ NEW: UPDATE MAIN EVENT DOCUMENT (For the UI List)
+      // This makes the "0 tickets sold" turn into "1 ticket sold" on the card
+      const eventRef = db.collection('events').doc(eventId);
+      batch.set(eventRef, {
+        ticketsSold: admin.firestore.FieldValue.increment(quantity),
+        totalTicketsSold: admin.firestore.FieldValue.increment(quantity)
+      }, { merge: true });
     }
 
     await batch.commit();
-    console.log(`✅ [Analytics] SUCCESS. Host ${hostId} updated.`);
+    console.log(`✅ [Analytics] Fully Synced (Host + Event + Stats)`);
   });
