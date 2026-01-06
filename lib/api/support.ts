@@ -67,12 +67,14 @@ export async function createSupportTicket(
 
   // Only after ticket is fully created, add the initial message to the sub-collection
   try {
-    await addDoc(collection(db, "supportTickets", ticketRef.id, "messages"), {
+    const messageData = {
       sender: "USER",
       message: data.description,
       ticketOwnerId: user.uid,
       createdAt: serverTimestamp(),
-    });
+    };
+    console.log("Payload:", messageData);
+    await addDoc(collection(db, "supportTickets", ticketRef.id, "messages"), messageData);
   } catch (messageError) {
     // If message creation fails, we still have the ticket, so log the error but don't fail the whole operation
     console.error("Failed to add initial message to ticket:", messageError);
