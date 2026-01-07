@@ -363,7 +363,7 @@ export default function VerificationTab({ onKycStatusChange }: VerificationTabPr
                   Your KYC documents are currently under review by our team.
                 </p>
                 <p className="text-sm text-yellow-700 max-w-lg mx-auto pt-2">
-                  This usually takes 24-48 hours. You can access the dashboard and explore features while we verify your documents. We'll notify you once the verification is complete.
+                  This usually takes 24-48 hours. You can access the dashboard and explore features while we verify your documents. We&apos;ll notify you once the verification is complete.
                 </p>
               </div>
 
