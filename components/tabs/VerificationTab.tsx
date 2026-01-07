@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, X, CheckCircle2, Clock, XCircle, FileText } from "lucide-react";
+import { Upload, X, CheckCircle2, Clock, XCircle, FileText, Sparkles, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 interface DocumentUpload {
   id: string;
@@ -293,14 +294,89 @@ export default function VerificationTab({ onKycStatusChange }: VerificationTabPr
         </CardHeader>
       </Card>
 
-      {/* KYC Form */}
+      {/* KYC Form - Conditional Rendering */}
       {isVerified ? (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-green-600">
-              <CheckCircle2 className="w-16 h-16 mx-auto mb-4" />
-              <p className="text-lg font-semibold">Your KYC is verified!</p>
-              <p className="text-sm text-gray-500 mt-2">No need to submit documents again.</p>
+        <Card className="border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+          <CardContent className="pt-12 pb-12">
+            <div className="max-w-2xl mx-auto text-center space-y-6">
+              <div className="relative inline-flex">
+                <div className="absolute inset-0 bg-green-400 rounded-full blur-xl opacity-30 animate-pulse"></div>
+                <div className="relative bg-green-500 rounded-full p-6">
+                  <CheckCircle2 className="w-20 h-20 text-white" strokeWidth={2.5} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-4xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                  KYC Verified Successfully!
+                  <span className="text-4xl">🎉</span>
+                </h2>
+                <p className="text-lg text-gray-600 max-w-md mx-auto">
+                  Your identity has been confirmed. You can now host events effortlessly.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+                <Link href="/events/create">
+                  <Button 
+                    size="lg" 
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200 w-full sm:w-auto"
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Create New Event
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </Link>
+
+                <Link href="/dashboard">
+                  <Button 
+                    size="lg" 
+                    variant="outline"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-6 text-lg font-semibold w-full sm:w-auto"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="pt-6 border-t border-green-200 mt-8">
+                <p className="text-sm text-gray-500">
+                  ✅ Full access to all platform features enabled
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : isPending ? (
+        <Card className="border-yellow-200 bg-gradient-to-br from-yellow-50 to-orange-50">
+          <CardContent className="pt-8 pb-8">
+            <div className="max-w-2xl mx-auto text-center space-y-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-400 rounded-full">
+                <Clock className="w-8 h-8 text-white" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-yellow-900">
+                  Verification in Progress
+                </h3>
+                <p className="text-base text-yellow-800">
+                  Your KYC documents are currently under review by our team.
+                </p>
+                <p className="text-sm text-yellow-700 max-w-lg mx-auto pt-2">
+                  This usually takes 24-48 hours. You can access the dashboard and explore features while we verify your documents. We'll notify you once the verification is complete.
+                </p>
+              </div>
+
+              <div className="pt-4">
+                <Link href="/dashboard">
+                  <Button 
+                    variant="outline"
+                    className="border-yellow-400 text-yellow-900 hover:bg-yellow-100"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
