@@ -79,70 +79,23 @@ export default function VerificationTab({ onKycStatusChange }: VerificationTabPr
       const user = auth.currentUser;
       if (!user) return;
 
-      console.log('Current User UID:', user.uid);
-
-      // Step 1: Check kyc_verified collection first
-      console.log('Checking kyc_verified collection...');
       const kycVerifiedDoc = await getDoc(doc(db, "kyc_verified", user.uid));
-      console.log('kyc_verified exists?:', kycVerifiedDoc.exists());
       
       if (kycVerifiedDoc.exists()) {
-        // User is verified - document exists in kyc_verified collection
-        console.log('User is VERIFIED via kyc_verified collection');
         setKycStatus({
           kycStatus: "verified",
           kycSubmittedAt: kycVerifiedDoc.data()?.verifiedAt || Date.now(),
           kycDetails: kycVerifiedDoc.data()
         });
-        return;
+      } else {
+        setKycStatus({
+          kycStatus: "not_started",
+          kycSubmittedAt: null,
+          kycDetails: null
+        });
       }
-
-      // Step 2: Check users collection for status in profile
-      console.log('Checking users collection...');
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        console.log('User Doc profile data:', userData?.profile);
-        
-        // Check nested profile.kycStatus
-        const userKycStatus = userData?.profile?.kycStatus;
-        console.log('profile.kycStatus value:', userKycStatus);
-        
-        if (userKycStatus === "verified") {
-          // User is verified via users collection
-          console.log('User is VERIFIED via users.profile.kycStatus');
-          setKycStatus({
-            kycStatus: "verified",
-            kycSubmittedAt: userData?.profile?.kycSubmittedAt || Date.now(),
-            kycDetails: userData?.profile?.kycDetails || null
-          });
-          return;
-        }
-        
-        if (userKycStatus === "pending") {
-          // User has submitted KYC but not yet verified
-          console.log('User status is PENDING');
-          setKycStatus({
-            kycStatus: "pending",
-            kycSubmittedAt: userData?.profile?.kycSubmittedAt || null,
-            kycDetails: userData?.profile?.kycDetails || null
-          });
-          return;
-        }
-      }
-
-      // Step 3: Default to not_started
-      console.log('Defaulting to NOT_STARTED');
-      setKycStatus({
-        kycStatus: "not_started",
-        kycSubmittedAt: null,
-        kycDetails: null
-      });
-
     } catch (error) {
       console.error("Error loading KYC status:", error);
-      // Set default status on error
       setKycStatus({
         kycStatus: "not_started",
         kycSubmittedAt: null,
