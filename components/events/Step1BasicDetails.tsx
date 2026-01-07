@@ -10,8 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventFormData, ValidationError } from "@/lib/types/event";
-import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { firebaseApp } from "@/lib/firebase";
+import { processImage, IMAGE_PRESETS, validateImageFile, revokePreviewUrl, ProcessedImage } from "@/lib/utils/imageProcessor";
+import { uploadToFirebaseStorage, generateCoverImagePath, UploadProgress } from "@/lib/utils/firebaseUpload";
+import { Loader2, AlertCircle, Check } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 
 interface Step1BasicDetailsProps {
   data: Partial<EventFormData>;
@@ -58,8 +61,22 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
   const [titleCharCount, setTitleCharCount] = useState(data.title?.length || 0);
   const [uploadingWide, setUploadingWide] = useState(false);
   const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const [wideProgress, setWideProgress] = useState(0);
+  const [portraitProgress, setPortraitProgress] = useState(0);
+  const [wideError, setWideError] = useState<string | null>(null);
+  const [portraitError, setPortraitError] = useState<string | null>(null);
+  const [widePreview, setWidePreview] = useState<string | null>(null);
+  const [portraitPreview, setPortraitPreview] = useState<string | null>(null);
 
   const getError = (field: string) => errors.find((e) => e.field === field)?.message;
+
+  // Cleanup preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (widePreview) revokePreviewUrl(widePreview);
+      if (portraitPreview) revokePreviewUrl(portraitPreview);
+    };
+  }, [widePreview, portraitPreview]);
 
   const handleTitleChange = (value: string) => {
     setTitleCharCount(value.length);
@@ -84,46 +101,90 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
 
   const handleFileUpload = async (file: File, type: "wide" | "portrait") => {
     const setUploading = type === "wide" ? setUploadingWide : setUploadingPortrait;
+    const setProgress = type === "wide" ? setWideProgress : setPortraitProgress;
+    const setError = type === "wide" ? setWideError : setPortraitError;
+    const setPreview = type === "wide" ? setWidePreview : setPortraitPreview;
+    const currentPreview = type === "wide" ? widePreview : portraitPreview;
+
+    // Reset state
+    setError(null);
+    setProgress(0);
     setUploading(true);
 
     try {
-      const storage = getStorage(firebaseApp);
-      const path = `events/covers/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-      const ref = storageRef(storage, path);
-
-      const uploadTask = uploadBytesResumable(ref, file);
-
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on(
-          "state_changed",
-          () => {},
-          (error) => reject(error),
-          () => resolve()
-        );
-      });
-
-      const downloadURL = await getDownloadURL(ref);
-
-      if (type === "wide") {
-        onChange({ ...data, coverPhotoWide: downloadURL });
-      } else {
-        onChange({ ...data, coverPhotoPortrait: downloadURL });
+      // Step 1: Validate file
+      const validation = validateImageFile(file, 10);
+      if (!validation.valid) {
+        throw new Error(validation.error || "Invalid file");
       }
 
-      console.log(`[UPLOAD] ${type} uploaded:`, downloadURL);
+      console.log(`📸 [${type.toUpperCase()}] Processing: ${file.name}`);
+
+      // Step 2: Process image (resize & crop)
+      const preset = type === "wide" ? IMAGE_PRESETS.WIDE : IMAGE_PRESETS.PORTRAIT;
+      const processed: ProcessedImage = await processImage(file, preset);
+
+      // Clean up old preview
+      if (currentPreview) {
+        revokePreviewUrl(currentPreview);
+      }
+
+      // Set preview immediately
+      setPreview(processed.preview);
+
+      console.log(`🔄 [${type.toUpperCase()}] Image processed, uploading to Firebase...`);
+
+      // Step 3: Upload to Firebase Storage
+      const path = generateCoverImagePath(null, type, file.name);
+      const result = await uploadToFirebaseStorage(processed.blob, path, {
+        onProgress: (progress: UploadProgress) => {
+          setProgress(progress.percentage);
+        },
+        onError: (error: Error) => {
+          setError(error.message);
+        },
+      });
+
+      // Step 4: Update form data with download URL
+      if (type === "wide") {
+        onChange({ ...data, coverPhotoWide: result.url });
+      } else {
+        onChange({ ...data, coverPhotoPortrait: result.url });
+      }
+
+      console.log(`✅ [${type.toUpperCase()}] Upload complete: ${result.url}`);
     } catch (err) {
-      console.error("Error uploading file:", err);
-      // Optionally show a toast to the user here
+      const errorMessage = err instanceof Error ? err.message : "Failed to upload image";
+      setError(errorMessage);
+      console.error(`❌ [${type.toUpperCase()}] Error:`, err);
     } finally {
       setUploading(false);
+      setProgress(0);
     }
   };
 
   const handleRemovePhoto = (type: "wide" | "portrait") => {
+    const preview = type === "wide" ? widePreview : portraitPreview;
+    
+    // Clean up preview URL
+    if (preview) {
+      revokePreviewUrl(preview);
+      if (type === "wide") {
+        setWidePreview(null);
+      } else {
+        setPortraitPreview(null);
+      }
+    }
+
+    // Clear form data
     if (type === "wide") {
       onChange({ ...data, coverPhotoWide: "" });
+      setWideError(null);
+      setWideProgress(0);
     } else {
       onChange({ ...data, coverPhotoPortrait: "" });
+      setPortraitError(null);
+      setPortraitProgress(0);
     }
   };
 
@@ -290,56 +351,87 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
         {/* Wide Cover Photo */}
         <div className="space-y-2" data-field="coverPhotoWide">
           <Label>Cover Photo – Wide (16:9) *</Label>
-          <p className="text-xs text-muted-foreground">Recommended: 1920x1080px</p>
+          <p className="text-xs text-muted-foreground">Auto-resized to 1920×1080px • PNG, JPG up to 10MB</p>
           
-          {!data.coverPhotoWide ? (
+          {!data.coverPhotoWide && !widePreview ? (
             <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors">
               <input
                 type="file"
                 id="wide-upload"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
+                disabled={uploadingWide}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFileUpload(file, "wide");
                 }}
               />
-              <label htmlFor="wide-upload" className="cursor-pointer">
-                <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <label htmlFor="wide-upload" className={uploadingWide ? "cursor-wait" : "cursor-pointer"}>
+                {uploadingWide ? (
+                  <Loader2 className="mx-auto h-12 w-12 text-primary mb-4 animate-spin" />
+                ) : (
+                  <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                )}
                 <p className="text-sm font-medium mb-1">
-                  {uploadingWide ? "Uploading..." : "Click to upload or drag and drop"}
+                  {uploadingWide ? "Processing & Uploading..." : "Click to upload or drag and drop"}
                 </p>
-                <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB</p>
+                <p className="text-xs text-muted-foreground">PNG, JPG • Auto-cropped & compressed</p>
               </label>
+              {uploadingWide && wideProgress > 0 && (
+                <div className="mt-4 space-y-2">
+                  <Progress value={wideProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground">{Math.round(wideProgress)}% uploaded</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="relative border rounded-lg overflow-hidden">
               <img
-                src={data.coverPhotoWide}
+                src={widePreview || data.coverPhotoWide}
                 alt="Wide cover"
                 className="w-full h-48 object-cover"
+                style={{ aspectRatio: "16/9" }}
               />
-              <div className="absolute top-2 right-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => document.getElementById("wide-upload-replace")?.click()}
-                >
-                  Replace
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => handleRemovePhoto("wide")}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              {uploadingWide && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin" />
+                    <p className="text-sm">{Math.round(wideProgress)}%</p>
+                  </div>
+                </div>
+              )}
+              {!uploadingWide && (
+                <>
+                  <div className="absolute top-2 right-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => document.getElementById("wide-upload-replace")?.click()}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleRemovePhoto("wide")}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {data.coverPhotoWide && (
+                    <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Uploaded
+                    </div>
+                  )}
+                </>
+              )}
               <input
                 type="file"
                 id="wide-upload-replace"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
+                disabled={uploadingWide}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFileUpload(file, "wide");
@@ -347,62 +439,102 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
               />
             </div>
           )}
+          
+          {/* Error Display */}
+          {wideError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{wideError}</AlertDescription>
+            </Alert>
+          )}
+          
           {getError("coverPhotoWide") && <p className="text-sm text-red-500">{getError("coverPhotoWide")}</p>}
         </div>
 
         {/* Portrait Cover Photo */}
         <div className="space-y-2" data-field="coverPhotoPortrait">
           <Label>Cover Photo – Portrait (9:16) *</Label>
-          <p className="text-xs text-muted-foreground">Recommended: 1080x1920px</p>
+          <p className="text-xs text-muted-foreground">Auto-resized to 1080×1920px • PNG, JPG up to 10MB</p>
           
-          {!data.coverPhotoPortrait ? (
-            <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors">
+          {!data.coverPhotoPortrait && !portraitPreview ? (
+            <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors max-w-xs mx-auto">
               <input
                 type="file"
                 id="portrait-upload"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
+                disabled={uploadingPortrait}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFileUpload(file, "portrait");
                 }}
               />
-              <label htmlFor="portrait-upload" className="cursor-pointer">
-                <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <label htmlFor="portrait-upload" className={uploadingPortrait ? "cursor-wait" : "cursor-pointer"}>
+                {uploadingPortrait ? (
+                  <Loader2 className="mx-auto h-12 w-12 text-primary mb-4 animate-spin" />
+                ) : (
+                  <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                )}
                 <p className="text-sm font-medium mb-1">
-                  {uploadingPortrait ? "Uploading..." : "Click to upload or drag and drop"}
+                  {uploadingPortrait ? "Processing & Uploading..." : "Click to upload or drag and drop"}
                 </p>
-                <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB</p>
+                <p className="text-xs text-muted-foreground">PNG, JPG • Auto-cropped & compressed</p>
               </label>
+              {uploadingPortrait && portraitProgress > 0 && (
+                <div className="mt-4 space-y-2">
+                  <Progress value={portraitProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground">{Math.round(portraitProgress)}% uploaded</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="relative border rounded-lg overflow-hidden max-w-xs mx-auto">
               <img
-                src={data.coverPhotoPortrait}
+                src={portraitPreview || data.coverPhotoPortrait}
                 alt="Portrait cover"
                 className="w-full h-64 object-cover"
+                style={{ aspectRatio: "9/16" }}
               />
-              <div className="absolute top-2 right-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => document.getElementById("portrait-upload-replace")?.click()}
-                >
-                  Replace
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => handleRemovePhoto("portrait")}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              {uploadingPortrait && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin" />
+                    <p className="text-sm">{Math.round(portraitProgress)}%</p>
+                  </div>
+                </div>
+              )}
+              {!uploadingPortrait && (
+                <>
+                  <div className="absolute top-2 right-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => document.getElementById("portrait-upload-replace")?.click()}
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleRemovePhoto("portrait")}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {data.coverPhotoPortrait && (
+                    <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Uploaded
+                    </div>
+                  )}
+                </>
+              )}
               <input
                 type="file"
                 id="portrait-upload-replace"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
+                disabled={uploadingPortrait}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFileUpload(file, "portrait");
@@ -410,6 +542,15 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
               />
             </div>
           )}
+          
+          {/* Error Display */}
+          {portraitError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{portraitError}</AlertDescription>
+            </Alert>
+          )}
+          
           {getError("coverPhotoPortrait") && <p className="text-sm text-red-500">{getError("coverPhotoPortrait")}</p>}
         </div>
       </div>
