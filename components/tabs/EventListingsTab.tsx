@@ -131,9 +131,16 @@ export default function EventListingsTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    <span>
-                      {eventAnalytics[event.id]?.totalTicketsSold ?? 0} tickets sold
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>
+                        {eventAnalytics[event.id]?.totalTicketsSold ?? 0} tickets sold
+                      </span>
+                      {eventAnalytics[event.id]?.totalRevenue > 0 && (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                          ₹{eventAnalytics[event.id].totalRevenue.toLocaleString('en-IN')} earned
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2">
