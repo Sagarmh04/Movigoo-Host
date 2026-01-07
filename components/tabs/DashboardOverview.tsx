@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CalendarCheck, IndianRupee, Loader2, DollarSign } from "lucide-react";
+import { CalendarCheck, IndianRupee, Loader2, DollarSign, ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, onSnapshot, query, where, doc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Badge } from "@/components/ui/badge";
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState<HostStats | null>(null);
@@ -19,6 +20,15 @@ export default function DashboardOverview() {
   const [realTimeGrossRevenue, setRealTimeGrossRevenue] = useState(0);
   const [analyticsTicketsSold, setAnalyticsTicketsSold] = useState<number>(0);
   const [analyticsRevenue, setAnalyticsRevenue] = useState<number>(0);
+  const [eventAnalytics, setEventAnalytics] = useState<Array<{
+    eventId: string;
+    eventName: string;
+    eventDate: string;
+    totalTicketsSold: number;
+    totalRevenue: number;
+    ticketBreakdown?: Record<string, { soldCount: number; revenue: number }>;
+  }>>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const bookingAggRef = useRef(new Map<string, { totalBookings: number; grossRevenue: number }>());
   const bookingUnsubsRef = useRef(new Map<string, () => void>());
 
@@ -209,17 +219,10 @@ export default function DashboardOverview() {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
           
-          // DEBUG: Log ALL fields from the document
           console.log("📄 [Analytics] Raw document data:", data);
-          console.log("📄 [Analytics] All field names:", Object.keys(data));
-          
-          // DEBUG: Log specific field values
           console.log("📊 [Analytics] Field mapping:", {
             "data.totalTicketsSold": data.totalTicketsSold,
             "data.totalRevenue": data.totalRevenue,
-            "data.updatedAt": data.updatedAt,
-            "typeof totalTicketsSold": typeof data.totalTicketsSold,
-            "typeof totalRevenue": typeof data.totalRevenue,
           });
           
           setAnalyticsTicketsSold(data.totalTicketsSold ?? 0);
@@ -231,27 +234,72 @@ export default function DashboardOverview() {
           });
         } else {
           console.warn("⚠️ [Analytics] Document does not exist:", `host_analytics/${user.uid}`);
-          console.warn("⚠️ [Analytics] Check if document exists in Firestore Console");
           setAnalyticsTicketsSold(0);
           setAnalyticsRevenue(0);
         }
       },
       (err) => {
         console.error("❌ [Analytics] Error listening to host_analytics:", err);
-        console.error("❌ [Analytics] Error code:", err.code);
-        console.error("❌ [Analytics] Error message:", err.message);
         
         if (err.code === "permission-denied") {
           console.error("🚫 [Analytics] PERMISSION DENIED - Check Firestore rules for host_analytics");
-          console.error("🚫 [Analytics] Required rule:");
-          console.error(`
-            match /host_analytics/{userId} {
-              allow read: if request.auth != null && request.auth.uid == userId;
-            }
-          `);
         }
       }
     );
+
+    // Listen to event_analytics for all host's events
+    const setupEventAnalyticsListeners = async () => {
+      try {
+        const eventsQuery = query(
+          collection(db, "events"),
+          where("hostUid", "==", user.uid)
+        );
+        const eventsSnapshot = await getDocs(eventsQuery);
+        const eventIds = eventsSnapshot.docs.map(doc => doc.id);
+
+        console.log("📊 [Event Analytics] Setting up listeners for events:", eventIds);
+
+        const eventUnsubscribers = eventIds.map(eventId => {
+          const eventAnalyticsRef = doc(db, "event_analytics", eventId);
+          return onSnapshot(
+            eventAnalyticsRef,
+            (docSnapshot) => {
+              if (docSnapshot.exists()) {
+                const data = docSnapshot.data();
+                const analyticsData = {
+                  eventId: docSnapshot.id,
+                  eventName: data.eventName || "Unnamed Event",
+                  eventDate: data.eventDate || "",
+                  totalTicketsSold: data.totalTicketsSold || 0,
+                  totalRevenue: data.totalRevenue || 0,
+                  ticketBreakdown: data.ticketBreakdown || {},
+                };
+
+                setEventAnalytics(prev => {
+                  const filtered = prev.filter(e => e.eventId !== docSnapshot.id);
+                  return [...filtered, analyticsData].sort((a, b) => 
+                    b.totalRevenue - a.totalRevenue
+                  );
+                });
+              }
+            },
+            (error) => {
+              console.error(`Error listening to analytics for ${eventId}:`, error);
+            }
+          );
+        });
+
+        return eventUnsubscribers;
+      } catch (error) {
+        console.error("Error setting up event analytics listeners:", error);
+        return [];
+      }
+    };
+
+    let eventUnsubscribers: (() => void)[] = [];
+    setupEventAnalyticsListeners().then(unsubs => {
+      eventUnsubscribers = unsubs;
+    });
 
     return () => {
       unsubHost();
@@ -261,6 +309,7 @@ export default function DashboardOverview() {
       bookingAggRef.current.clear();
       unsubPayouts();
       unsubAnalytics();
+      eventUnsubscribers.forEach(unsub => unsub());
     };
   }, [user?.uid]);
 
@@ -526,6 +575,126 @@ export default function DashboardOverview() {
           </div>
         </div>
       </div>
+
+      {/* Event Performance Table with Ticket Breakdown */}
+      {eventAnalytics.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" />
+              <h2 className="text-xl font-semibold">Event Performance</h2>
+            </div>
+            <p className="text-gray-500 text-sm mt-1">
+              Click any event to see detailed ticket type breakdown
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12"></th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tickets Sold</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {eventAnalytics.map((event) => {
+                  const isExpanded = expandedRows.has(event.eventId);
+                  const hasBreakdown = event.ticketBreakdown && Object.keys(event.ticketBreakdown).length > 0;
+
+                  return (
+                    <>
+                      <tr
+                        key={event.eventId}
+                        className={`hover:bg-gray-50 transition-colors ${hasBreakdown ? 'cursor-pointer' : ''}`}
+                        onClick={() => hasBreakdown && setExpandedRows(prev => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(event.eventId)) {
+                            newSet.delete(event.eventId);
+                          } else {
+                            newSet.add(event.eventId);
+                          }
+                          return newSet;
+                        })}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {hasBreakdown && (
+                            <button className="text-gray-400 hover:text-gray-600">
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{event.eventName}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">
+                            {event.eventDate ? new Date(event.eventDate).toLocaleDateString('en-IN', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            }) : 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <div className="text-sm font-semibold text-gray-900">
+                            {event.totalTicketsSold.toLocaleString('en-IN')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <div className="text-sm font-semibold text-green-600">
+                            {formatCurrency(event.totalRevenue)}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {isExpanded && hasBreakdown && (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-4 bg-gray-50">
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-semibold text-gray-700">Ticket Type Breakdown</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {Object.entries(event.ticketBreakdown!).map(([typeName, stats]) => (
+                                  <div key={typeName} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <span className="font-medium text-gray-900 text-sm">{typeName}</span>
+                                      <Badge variant="outline" className="text-xs">
+                                        {stats.soldCount} sold
+                                      </Badge>
+                                    </div>
+                                    <p className="text-xl font-bold text-green-600">
+                                      {formatCurrency(stats.revenue)}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Avg: {formatCurrency(stats.revenue / stats.soldCount)}
+                                    </p>
+                                    <div className="mt-2 w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-blue-600 h-full transition-all"
+                                        style={{ width: `${Math.min((stats.soldCount / 50) * 100, 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Performance Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
