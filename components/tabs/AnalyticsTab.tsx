@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, getDocs, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -73,13 +73,41 @@ export default function AnalyticsTab() {
         const analyticsDocRef = doc(db, "event_analytics", eventId);
         return onSnapshot(
           analyticsDocRef,
-          (docSnapshot) => {
+          async (docSnapshot) => {
             if (docSnapshot.exists()) {
               const data = docSnapshot.data();
+              let eventName = data.eventName || "";
+              let eventDate = data.eventDate || "";
+
+              // Fallback: If eventName is missing, fetch from events collection
+              if (!eventName || eventName === "Unnamed Event") {
+                try {
+                  const eventDocRef = doc(db, "events", docSnapshot.id);
+                  const eventDoc = await getDoc(eventDocRef);
+                  
+                  if (eventDoc.exists()) {
+                    const eventData = eventDoc.data();
+                    eventName = eventData.title || eventData.name || "Unnamed Event";
+                    eventDate = eventDate || eventData.date || eventData.startDate || "";
+
+                    // Auto-update: Save the correct name to analytics document
+                    if (eventName !== "Unnamed Event") {
+                      console.log(`🔧 [Analytics] Auto-fixing missing eventName for ${docSnapshot.id}`);
+                      await updateDoc(analyticsDocRef, {
+                        eventName,
+                        eventDate,
+                      });
+                    }
+                  }
+                } catch (error) {
+                  console.error(`Error fetching event details for ${docSnapshot.id}:`, error);
+                }
+              }
+
               const analyticsData: EventAnalyticsData = {
                 eventId: docSnapshot.id,
-                eventName: data.eventName || "Unnamed Event",
-                eventDate: data.eventDate || "",
+                eventName,
+                eventDate,
                 totalTicketsSold: data.totalTicketsSold || 0,
                 totalRevenue: data.totalRevenue || 0,
                 ticketBreakdown: data.ticketBreakdown || {},
