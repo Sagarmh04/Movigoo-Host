@@ -117,7 +117,22 @@ export async function POST(request: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // 5. Update event_analytics with ticket type breakdown
+      // 5. Get hostId from event (needed for both analytics updates)
+      const eventRef = adminDb.collection('events').doc(eventId);
+      const eventDoc = await transaction.get(eventRef);
+      
+      if (!eventDoc.exists) {
+        throw new Error('Event not found');
+      }
+
+      const eventData = eventDoc.data();
+      const hostId = eventData?.hostUid || eventData?.hostId;
+
+      if (!hostId) {
+        throw new Error('Host ID not found in event data');
+      }
+
+      // 6. Update event_analytics with ticket type breakdown AND hostId
       const analyticsRef = adminDb.collection('event_analytics').doc(eventId);
 
       // Build the nested map update for ticket breakdown
@@ -136,6 +151,7 @@ export async function POST(request: NextRequest) {
           eventName,
           eventDate,
           eventId,
+          hostId, // CRITICAL: Required for Firestore Rules
           
           // Nested ticket type breakdown
           ...ticketBreakdownUpdate,
@@ -145,28 +161,18 @@ export async function POST(request: NextRequest) {
         { merge: true }
       );
 
-      // 6. Update host_analytics (get hostId from event first)
-      const eventRef = adminDb.collection('events').doc(eventId);
-      const eventDoc = await transaction.get(eventRef);
-      
-      if (eventDoc.exists) {
-        const eventData = eventDoc.data();
-        const hostId = eventData?.hostUid || eventData?.hostId;
-        
-        if (hostId) {
-          const hostAnalyticsRef = adminDb.collection('host_analytics').doc(hostId);
-          transaction.set(
-            hostAnalyticsRef,
-            {
-              totalRevenue: FieldValue.increment(totalPrice),
-              totalTicketsSold: FieldValue.increment(quantity),
-              hostId,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-        }
-      }
+      // 7. Update host_analytics
+      const hostAnalyticsRef = adminDb.collection('host_analytics').doc(hostId);
+      transaction.set(
+        hostAnalyticsRef,
+        {
+          totalRevenue: FieldValue.increment(totalPrice),
+          totalTicketsSold: FieldValue.increment(quantity),
+          hostId,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
 
       return { bookingId: bookingRef.id };
     });
