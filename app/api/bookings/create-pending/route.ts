@@ -139,10 +139,19 @@ export async function POST(request: NextRequest) {
       // 6. Update event_analytics with ticket type breakdown AND hostId
       const analyticsRef = adminDb.collection('event_analytics').doc(eventId);
 
+      // Sanitize ticket type name for Firestore (remove dots and special characters)
+      const sanitizedTicketName = ticketTypeName
+        .replace(/\./g, '_')  // Replace dots with underscores
+        .replace(/\$/g, '_')  // Replace $ with underscores
+        .replace(/\[/g, '_')  // Replace [ with underscores
+        .replace(/\]/g, '_')  // Replace ] with underscores
+        .replace(/\//g, '_')  // Replace / with underscores
+        .trim();
+
       // Build the nested map update for ticket breakdown
       const ticketBreakdownUpdate: any = {};
-      ticketBreakdownUpdate[`ticketBreakdown.${ticketTypeName}.soldCount`] = FieldValue.increment(quantity);
-      ticketBreakdownUpdate[`ticketBreakdown.${ticketTypeName}.revenue`] = FieldValue.increment(totalPrice);
+      ticketBreakdownUpdate[`ticketBreakdown.${sanitizedTicketName}.soldCount`] = FieldValue.increment(quantity);
+      ticketBreakdownUpdate[`ticketBreakdown.${sanitizedTicketName}.revenue`] = FieldValue.increment(totalPrice);
 
       transaction.set(
         analyticsRef,

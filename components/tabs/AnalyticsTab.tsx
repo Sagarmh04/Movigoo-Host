@@ -324,40 +324,54 @@ export default function AnalyticsTab() {
                           </td>
                         </tr>
 
-                        {isExpanded && hasBreakdown && (
+                        {isExpanded && (
                           <tr>
                             <td colSpan={5} className="px-6 py-4 bg-gray-50">
                               <div className="space-y-3">
                                 <h4 className="text-sm font-semibold text-gray-700">
                                   Ticket Type Breakdown
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                  {Object.entries(event.ticketBreakdown!).map(([typeName, stats]) => (
-                                    <div 
-                                      key={typeName}
-                                      className="bg-white border rounded-lg p-3 shadow-sm"
-                                    >
-                                      <div className="flex justify-between items-start mb-2">
-                                        <span className="font-medium text-gray-900">{typeName}</span>
-                                        <Badge variant="outline" className="text-xs">
-                                          {stats.soldCount} sold
-                                        </Badge>
-                                      </div>
-                                      <p className="text-xl font-bold text-green-600">
-                                        {formatCurrency(stats.revenue)}
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Avg: {formatCurrency(stats.revenue / stats.soldCount)}
-                                      </p>
-                                      <div className="mt-2 w-full bg-gray-200 h-1.5 rounded-full">
-                                        <div
-                                          className="bg-blue-600 h-full transition-all"
-                                          style={{ width: `${Math.min((stats.soldCount / 50) * 100, 100)}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                                {!hasBreakdown || Object.keys(event.ticketBreakdown || {}).length === 0 ? (
+                                  <div className="text-center py-8">
+                                    <p className="text-gray-500 text-sm">
+                                      No breakdown available yet. Ticket type details will appear here once bookings are made.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {Object.entries(event.ticketBreakdown!).map(([typeName, stats]) => {
+                                      // Validate stats object has required fields
+                                      const soldCount = stats?.soldCount || 0;
+                                      const revenue = stats?.revenue || 0;
+                                      
+                                      return (
+                                        <div 
+                                          key={typeName}
+                                          className="bg-white border rounded-lg p-3 shadow-sm"
+                                        >
+                                          <div className="flex justify-between items-start mb-2">
+                                            <span className="font-medium text-gray-900">{typeName}</span>
+                                            <Badge variant="outline" className="text-xs">
+                                              {soldCount} sold
+                                            </Badge>
+                                          </div>
+                                          <p className="text-xl font-bold text-green-600">
+                                            {formatCurrency(revenue)}
+                                          </p>
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            Avg: {soldCount > 0 ? formatCurrency(revenue / soldCount) : '₹0'}
+                                          </p>
+                                          <div className="mt-2 w-full bg-gray-200 h-1.5 rounded-full">
+                                            <div
+                                              className="bg-blue-600 h-full transition-all"
+                                              style={{ width: `${Math.min((soldCount / 50) * 100, 100)}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
