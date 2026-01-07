@@ -79,22 +79,52 @@ export default function VerificationTab({ onKycStatusChange }: VerificationTabPr
       const user = auth.currentUser;
       if (!user) return;
 
-      const idToken = await user.getIdToken();
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/getKycStatus`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken }),
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setKycStatus(data);
+      // Step 1: Check kyc_verified collection first
+      const kycVerifiedDoc = await getDoc(doc(db, "kyc_verified", user.uid));
+      
+      if (kycVerifiedDoc.exists()) {
+        // User is verified - document exists in kyc_verified collection
+        setKycStatus({
+          kycStatus: "verified",
+          kycSubmittedAt: kycVerifiedDoc.data()?.verifiedAt || Date.now(),
+          kycDetails: kycVerifiedDoc.data()
+        });
+        return;
       }
+
+      // Step 2: Check users collection for pending status
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const userKycStatus = userData?.kycStatus;
+        
+        if (userKycStatus === "pending") {
+          // User has submitted KYC but not yet verified
+          setKycStatus({
+            kycStatus: "pending",
+            kycSubmittedAt: userData?.kycSubmittedAt || null,
+            kycDetails: userData?.kycDetails || null
+          });
+          return;
+        }
+      }
+
+      // Step 3: Default to not_started
+      setKycStatus({
+        kycStatus: "not_started",
+        kycSubmittedAt: null,
+        kycDetails: null
+      });
+
     } catch (error) {
       console.error("Error loading KYC status:", error);
+      // Set default status on error
+      setKycStatus({
+        kycStatus: "not_started",
+        kycSubmittedAt: null,
+        kycDetails: null
+      });
     }
   };
 
