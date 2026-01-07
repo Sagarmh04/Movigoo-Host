@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      // 5. Get hostId from event (needed for both analytics updates)
+      // 5. Get event data (needed for analytics metadata)
       const eventRef = adminDb.collection('events').doc(eventId);
       const eventDoc = await transaction.get(eventRef);
       
@@ -131,6 +131,10 @@ export async function POST(request: NextRequest) {
       if (!hostId) {
         throw new Error('Host ID not found in event data');
       }
+
+      // Extract event name and date from the events document
+      const actualEventName = eventData?.title || eventData?.name || eventName;
+      const actualEventDate = eventData?.date || eventData?.startDate || eventDate;
 
       // 6. Update event_analytics with ticket type breakdown AND hostId
       const analyticsRef = adminDb.collection('event_analytics').doc(eventId);
@@ -147,9 +151,9 @@ export async function POST(request: NextRequest) {
           totalRevenue: FieldValue.increment(totalPrice),
           totalTicketsSold: FieldValue.increment(quantity),
           
-          // Event metadata (only set on first write)
-          eventName,
-          eventDate,
+          // Event metadata from events document
+          eventName: actualEventName,
+          eventDate: actualEventDate,
           eventId,
           hostId, // CRITICAL: Required for Firestore Rules
           
