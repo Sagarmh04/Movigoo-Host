@@ -96,7 +96,6 @@ export async function getEventAnalytics(eventId: string): Promise<EventAnalytics
     const analyticsDocRef = doc(db, "event_analytics", eventId);
     const analyticsDocPath = `event_analytics/${eventId}`;
     
-    // DEBUG: Log read attempt
     console.log("📖 [Event Analytics] Reading from:", analyticsDocPath);
     
     const analyticsDoc = await getDoc(analyticsDocRef);
@@ -107,16 +106,20 @@ export async function getEventAnalytics(eventId: string): Promise<EventAnalytics
     }
     
     const data = analyticsDoc.data();
-    const result = {
+    const result: EventAnalytics = {
       totalTicketsSold: data.totalTicketsSold ?? 0,
       totalRevenue: data.totalRevenue ?? 0,
+      ticketBreakdown: data.ticketBreakdown || {},
+      eventName: data.eventName,
+      eventDate: data.eventDate,
+      eventId: data.eventId,
       updatedAt: data.updatedAt,
     };
     
-    // DEBUG: Log raw data from Firestore
     console.log("📄 [Event Analytics] Raw Firestore data for", eventId, ":", {
       totalTicketsSold: data.totalTicketsSold,
       totalRevenue: data.totalRevenue,
+      ticketBreakdown: data.ticketBreakdown,
       updatedAt: data.updatedAt,
     });
     
