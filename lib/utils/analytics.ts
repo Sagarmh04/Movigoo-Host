@@ -13,11 +13,19 @@ export interface HostAnalytics {
   // Add other analytics fields as needed
 }
 
+export interface TicketTypeBreakdown {
+  soldCount: number;
+  revenue: number;
+}
+
 export interface EventAnalytics {
   totalTicketsSold: number;
   totalRevenue: number;
+  ticketBreakdown?: Record<string, TicketTypeBreakdown>; // e.g., { "Single": { soldCount: 12, revenue: 6000 } }
+  eventName?: string;
+  eventDate?: string;
+  eventId?: string;
   updatedAt?: any; // Firestore timestamp
-  // Add other analytics fields as needed
 }
 
 /**
