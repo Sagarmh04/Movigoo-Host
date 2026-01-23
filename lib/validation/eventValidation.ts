@@ -1,4 +1,4 @@
-// Event validation utilities
+// Event validation utilitiest
 import { EventFormData, EventLocation, EventVenue, EventDate, EventShow, ValidationError, VenueTicketConfig } from "../types/event";
 
 /**
