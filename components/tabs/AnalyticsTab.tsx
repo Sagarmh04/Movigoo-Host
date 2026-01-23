@@ -52,6 +52,22 @@ export default function AnalyticsTab() {
     loadAnalytics(user.uid);
   }, []);
 
+  const normalizeEventDate = (value: any): string => {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === "number") return new Date(value).toISOString();
+    if (typeof value === "object") {
+      if (typeof value.toDate === "function") {
+        return value.toDate().toISOString();
+      }
+      if (typeof value.seconds === "number") {
+        return new Date(value.seconds * 1000).toISOString();
+      }
+    }
+    return "";
+  };
+
   const loadAnalytics = async (hostId: string) => {
     try {
       setLoading(true);
@@ -77,10 +93,10 @@ export default function AnalyticsTab() {
             if (docSnapshot.exists()) {
               const data = docSnapshot.data();
               let eventName = data.eventName || "";
-              let eventDate = data.eventDate || "";
+              let eventDate = normalizeEventDate(data.eventDate);
 
-              // Fallback: If eventName is missing, fetch from events collection
-              if (!eventName || eventName === "Unnamed Event") {
+              // Fallback: If eventName or eventDate is missing, fetch from events collection
+              if (!eventName || eventName === "Unnamed Event" || !eventDate) {
                 try {
                   const eventDocRef = doc(db, "events", docSnapshot.id);
                   const eventDoc = await getDoc(eventDocRef);
@@ -88,10 +104,10 @@ export default function AnalyticsTab() {
                   if (eventDoc.exists()) {
                     const eventData = eventDoc.data();
                     eventName = eventData.title || eventData.name || "Unnamed Event";
-                    eventDate = eventDate || eventData.date || eventData.startDate || "";
+                    eventDate = eventDate || normalizeEventDate(eventData.date) || normalizeEventDate(eventData.startDate);
 
                     // Auto-update: Save the correct name to analytics document
-                    if (eventName !== "Unnamed Event") {
+                    if (eventName !== "Unnamed Event" || eventDate) {
                       console.log(`🔧 [Analytics] Auto-fixing missing eventName for ${docSnapshot.id}`);
                       await updateDoc(analyticsDocRef, {
                         eventName,

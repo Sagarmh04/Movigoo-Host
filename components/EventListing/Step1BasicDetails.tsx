@@ -22,8 +22,11 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, Image as ImageIcon } from "lucide-react";
-import { useState } from "react";
+import { Upload, Image as ImageIcon, Loader2, AlertCircle, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { processImage, IMAGE_PRESETS, validateImageFile, revokePreviewUrl } from "@/lib/utils/imageProcessor";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 
 interface Step1BasicDetailsProps {
   form: UseFormReturn<EventFormData>;
@@ -32,30 +35,110 @@ interface Step1BasicDetailsProps {
 export default function Step1BasicDetails({ form }: Step1BasicDetailsProps) {
   const [coverWidePreview, setCoverWidePreview] = useState<string | null>(null);
   const [coverPortraitPreview, setCoverPortraitPreview] = useState<string | null>(null);
+  const [uploadingWide, setUploadingWide] = useState(false);
+  const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const [wideError, setWideError] = useState<string | null>(null);
+  const [portraitError, setPortraitError] = useState<string | null>(null);
 
-  // Handle cover wide photo upload
-  const handleCoverWideChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Cleanup preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (coverWidePreview) revokePreviewUrl(coverWidePreview);
+      if (coverPortraitPreview) revokePreviewUrl(coverPortraitPreview);
+    };
+  }, [coverWidePreview, coverPortraitPreview]);
+
+  // Handle cover wide photo upload (16:9)
+  const handleCoverWideChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      form.setValue("coverWide", file, { shouldValidate: true });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverWidePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setWideError(null);
+    setUploadingWide(true);
+
+    try {
+      // Validate file
+      const validation = validateImageFile(file, 10);
+      if (!validation.valid) {
+        throw new Error(validation.error || "Invalid file");
+      }
+
+      console.log(`📸 [Wide Cover] Processing: ${file.name}`);
+
+      // Process image (resize & crop to 1920×1080)
+      const processed = await processImage(file, IMAGE_PRESETS.WIDE);
+
+      // Clean up old preview
+      if (coverWidePreview) {
+        revokePreviewUrl(coverWidePreview);
+      }
+
+      // Set preview
+      setCoverWidePreview(processed.preview);
+
+      // Create File from Blob for form
+      const resizedFile = new File([processed.blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+
+      // Store processed file in form
+      form.setValue("coverWide", resizedFile, { shouldValidate: true });
+
+      console.log(`✅ [Wide Cover] Processed: ${processed.dimensions.width}×${processed.dimensions.height}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to process image";
+      setWideError(errorMessage);
+      console.error("❌ [Wide Cover] Error:", error);
+    } finally {
+      setUploadingWide(false);
     }
   };
 
-  // Handle portrait photo upload
-  const handleCoverPortraitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle portrait photo upload (9:16)
+  const handleCoverPortraitChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      form.setValue("coverPortrait", file, { shouldValidate: true });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverPortraitPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setPortraitError(null);
+    setUploadingPortrait(true);
+
+    try {
+      // Validate file
+      const validation = validateImageFile(file, 10);
+      if (!validation.valid) {
+        throw new Error(validation.error || "Invalid file");
+      }
+
+      console.log(`📸 [Portrait Cover] Processing: ${file.name}`);
+
+      // Process image (resize & crop to 1080×1920)
+      const processed = await processImage(file, IMAGE_PRESETS.PORTRAIT);
+
+      // Clean up old preview
+      if (coverPortraitPreview) {
+        revokePreviewUrl(coverPortraitPreview);
+      }
+
+      // Set preview
+      setCoverPortraitPreview(processed.preview);
+
+      // Create File from Blob for form
+      const resizedFile = new File([processed.blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+
+      // Store processed file in form
+      form.setValue("coverPortrait", resizedFile, { shouldValidate: true });
+
+      console.log(`✅ [Portrait Cover] Processed: ${processed.dimensions.width}×${processed.dimensions.height}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to process image";
+      setPortraitError(errorMessage);
+      console.error("❌ [Portrait Cover] Error:", error);
+    } finally {
+      setUploadingPortrait(false);
     }
   };
 
@@ -97,46 +180,82 @@ export default function Step1BasicDetails({ form }: Step1BasicDetailsProps) {
             name="coverWide"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Cover Photo (Wide) *</FormLabel>
+                <FormLabel>Cover Photo (Wide 16:9) *</FormLabel>
                 <FormControl>
                   <div className="space-y-2">
                     <Input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/jpg"
                       onChange={handleCoverWideChange}
                       className="hidden"
                       id="coverWide-upload"
+                      disabled={uploadingWide}
                     />
                     <label htmlFor="coverWide-upload">
                       <Button
                         type="button"
                         variant="outline"
                         className="w-full cursor-pointer"
+                        disabled={uploadingWide}
                         asChild
                       >
                         <span className="flex items-center justify-center gap-2">
-                          <Upload className="h-4 w-4" />
-                          Upload Wide Cover Photo
+                          {uploadingWide ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : coverWidePreview ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Replace Wide Cover Photo
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" />
+                              Upload Wide Cover Photo
+                            </>
+                          )}
                         </span>
                       </Button>
                     </label>
+
+                    {/* Error Alert */}
+                    {wideError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{wideError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Preview */}
                     {coverWidePreview && (
                       <Card className="mt-2">
                         <CardContent className="p-2">
                           <img
                             src={coverWidePreview}
                             alt="Cover wide preview"
-                            className="w-full h-32 object-cover rounded"
+                            className="w-full h-48 object-cover rounded"
+                            style={{ aspectRatio: "16/9" }}
                           />
+                          <p className="text-xs text-muted-foreground mt-2 text-center">
+                            ✅ Auto-resized to 1920×1080 (16:9)
+                          </p>
                         </CardContent>
                       </Card>
                     )}
-                    {field.value && !coverWidePreview && (
+
+                    {/* File info without preview */}
+                    {field.value && !coverWidePreview && !uploadingWide && (
                       <p className="text-sm text-muted-foreground flex items-center gap-2">
                         <ImageIcon className="h-4 w-4" />
                         {(field.value as File)?.name}
                       </p>
                     )}
+
+                    <p className="text-xs text-muted-foreground">
+                      Auto-resized to 1920×1080px • PNG, JPG up to 10MB • Auto-cropped & compressed
+                    </p>
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -150,46 +269,82 @@ export default function Step1BasicDetails({ form }: Step1BasicDetailsProps) {
             name="coverPortrait"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Portrait Photo *</FormLabel>
+                <FormLabel>Portrait Photo (9:16) *</FormLabel>
                 <FormControl>
                   <div className="space-y-2">
                     <Input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/jpg"
                       onChange={handleCoverPortraitChange}
                       className="hidden"
                       id="coverPortrait-upload"
+                      disabled={uploadingPortrait}
                     />
                     <label htmlFor="coverPortrait-upload">
                       <Button
                         type="button"
                         variant="outline"
                         className="w-full cursor-pointer"
+                        disabled={uploadingPortrait}
                         asChild
                       >
                         <span className="flex items-center justify-center gap-2">
-                          <Upload className="h-4 w-4" />
-                          Upload Portrait Photo
+                          {uploadingPortrait ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : coverPortraitPreview ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Replace Portrait Photo
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" />
+                              Upload Portrait Photo
+                            </>
+                          )}
                         </span>
                       </Button>
                     </label>
+
+                    {/* Error Alert */}
+                    {portraitError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{portraitError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Preview */}
                     {coverPortraitPreview && (
                       <Card className="mt-2">
                         <CardContent className="p-2">
                           <img
                             src={coverPortraitPreview}
                             alt="Portrait preview"
-                            className="w-24 h-32 object-cover rounded mx-auto"
+                            className="w-32 h-56 object-cover rounded mx-auto"
+                            style={{ aspectRatio: "9/16" }}
                           />
+                          <p className="text-xs text-muted-foreground mt-2 text-center">
+                            ✅ Auto-resized to 1080×1920 (9:16)
+                          </p>
                         </CardContent>
                       </Card>
                     )}
-                    {field.value && !coverPortraitPreview && (
+
+                    {/* File info without preview */}
+                    {field.value && !coverPortraitPreview && !uploadingPortrait && (
                       <p className="text-sm text-muted-foreground flex items-center gap-2">
                         <ImageIcon className="h-4 w-4" />
                         {(field.value as File)?.name}
                       </p>
                     )}
+
+                    <p className="text-xs text-muted-foreground">
+                      Auto-resized to 1080×1920px • PNG, JPG up to 10MB • Auto-cropped & compressed
+                    </p>
                   </div>
                 </FormControl>
                 <FormMessage />

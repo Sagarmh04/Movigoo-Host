@@ -5,7 +5,7 @@ import { CalendarCheck, IndianRupee, Loader2, DollarSign, ChevronDown, ChevronRi
 import { computeHostStats, type HostStats } from "@/lib/utils/stats";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, onSnapshot, query, where, doc, getDocs } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, getDocs, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui/badge";
 
@@ -46,6 +46,22 @@ export default function DashboardOverview() {
     if (!user?.uid) {
       return;
     }
+
+    const normalizeEventDate = (value: any): string => {
+      if (!value) return "";
+      if (typeof value === "string") return value;
+      if (value instanceof Date) return value.toISOString();
+      if (typeof value === "number") return new Date(value).toISOString();
+      if (typeof value === "object") {
+        if (typeof value.toDate === "function") {
+          return value.toDate().toISOString();
+        }
+        if (typeof value.seconds === "number") {
+          return new Date(value.seconds * 1000).toISOString();
+        }
+      }
+      return "";
+    };
 
     const normalizeStatus = (status: unknown) => {
       if (typeof status === "string") {
@@ -263,13 +279,37 @@ export default function DashboardOverview() {
           const eventAnalyticsRef = doc(db, "event_analytics", eventId);
           return onSnapshot(
             eventAnalyticsRef,
-            (docSnapshot) => {
+            async (docSnapshot) => {
               if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
+                let eventName = data.eventName || "";
+                let eventDate = normalizeEventDate(data.eventDate);
+
+                if (!eventName || eventName === "Unnamed Event" || !eventDate) {
+                  try {
+                    const eventDocRef = doc(db, "events", docSnapshot.id);
+                    const eventDoc = await getDoc(eventDocRef);
+                    if (eventDoc.exists()) {
+                      const eventData = eventDoc.data();
+                      eventName = eventName || eventData.title || eventData.name || "Unnamed Event";
+                      eventDate = eventDate || normalizeEventDate(eventData.date) || normalizeEventDate(eventData.startDate);
+
+                      if (eventName !== "Unnamed Event" || eventDate) {
+                        await updateDoc(eventAnalyticsRef, {
+                          eventName,
+                          eventDate,
+                        });
+                      }
+                    }
+                  } catch (error) {
+                    console.error(`Error fetching event details for ${docSnapshot.id}:`, error);
+                  }
+                }
+
                 const analyticsData = {
                   eventId: docSnapshot.id,
-                  eventName: data.eventName || "Unnamed Event",
-                  eventDate: data.eventDate || "",
+                  eventName: eventName || "Unnamed Event",
+                  eventDate,
                   totalTicketsSold: data.totalTicketsSold || 0,
                   totalRevenue: data.totalRevenue || 0,
                   ticketBreakdown: data.ticketBreakdown || {},
