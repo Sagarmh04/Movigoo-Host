@@ -107,21 +107,30 @@ export default function AnalyticsPage() {
               let eventName = data.eventName || "";
               let eventDate = normalizeEventDate(data.eventDate);
 
-              if (!eventName || eventName === "Unnamed Event" || !eventDate) {
+              // Aggressive self-healing: Fetch real event data if bad data detected
+              if (!eventName || eventName === "Unnamed Event" || eventName === "Untitled Event" || !eventDate || eventDate === "N/A") {
                 try {
                   const eventDocRef = doc(db, "events", docSnapshot.id);
                   const eventDoc = await getDoc(eventDocRef);
                   if (eventDoc.exists()) {
                     const eventData = eventDoc.data();
-                    eventName = eventName || eventData.title || eventData.name || "Unnamed Event";
-                    eventDate = eventDate || normalizeEventDate(eventData.date) || normalizeEventDate(eventData.startDate);
+                    const realEventName = eventData.title || eventData.name || "Unnamed Event";
+                    const realEventDate = normalizeEventDate(eventData.date) || normalizeEventDate(eventData.startDate);
 
-                    if (eventName !== "Unnamed Event" || eventDate) {
-                      await updateDoc(analyticsDocRef, {
-                        eventName,
-                        eventDate,
-                      });
+                    // Always update if we have real data and current data is bad
+                    if (realEventName && realEventName !== "Unnamed Event" && realEventName !== "Untitled Event") {
+                      eventName = realEventName;
                     }
+                    if (realEventDate && realEventDate !== "N/A") {
+                      eventDate = realEventDate;
+                    }
+
+                    // Immediately overwrite bad data in Firestore
+                    console.log(`🔧 [Analytics Page] Aggressively fixing bad data for ${docSnapshot.id}`);
+                    await updateDoc(analyticsDocRef, {
+                      eventName,
+                      eventDate,
+                    });
                   }
                 } catch (error) {
                   console.error(`Error fetching event details for ${docSnapshot.id}:`, error);
