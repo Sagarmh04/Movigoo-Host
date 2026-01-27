@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Plus, Calendar, MapPin, Users, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,9 +157,15 @@ export default function EventListingsTab() {
                     variant="default"
                     size="sm"
                     className="flex-1"
-                    onClick={() => router.push(`/events/${event.id}`)}
+                    asChild
                   >
-                    View
+                    <Link 
+                      href={`/events/${event.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View
+                    </Link>
                   </Button>
                 </div>
               </CardContent>
