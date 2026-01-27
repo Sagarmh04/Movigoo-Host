@@ -612,18 +612,6 @@ export default function DashboardOverview() {
         </div>
       </div>
 
-      {/* Secondary Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <p className="text-gray-500 text-sm">Total Events</p>
-          <h3 className="text-2xl font-bold mt-2">{displayStats.totalEvents}</h3>
-          <div className="mt-2 flex gap-2 text-xs">
-            <span className="text-blue-600">{displayStats.hostedEvents} hosted</span>
-            <span className="text-gray-400">•</span>
-            <span className="text-gray-600">{displayStats.draftEvents} drafts</span>
-          </div>
-        </div>
-      </div>
 
       {/* Event Performance Table with Ticket Breakdown */}
       {eventAnalytics.length > 0 && (
@@ -633,9 +621,6 @@ export default function DashboardOverview() {
               <TrendingUp className="h-5 w-5 text-blue-600" />
               <h2 className="text-xl font-semibold">Event Performance</h2>
             </div>
-            <p className="text-gray-500 text-sm mt-1">
-              Click any event to see detailed ticket type breakdown
-            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
