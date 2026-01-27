@@ -484,7 +484,7 @@ export default function SuperAdminOrganizersPage() {
         formatDate(org.kycVerifiedAt),
         org.bankDetails?.bankName || "N/A",
         org.bankDetails?.ifscCode || "N/A",
-        org.bankDetails?.accountNumberLast4 ? `XXXXXX${org.bankDetails.accountNumberLast4}` : "N/A",
+        org.bankDetails?.accountNumberFull || org.bankDetails?.accountNumberLast4 || "N/A",
         org.bankDetails?.beneficiaryName || "N/A",
         org.bankDetails?.accountType || "N/A",
         bankStatus,
@@ -774,11 +774,8 @@ export default function SuperAdminOrganizersPage() {
                                       <div>
                                         <span className="text-gray-500">Account:</span>
                                         <span className="ml-2 font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-900">
-                                          {org.bankDetails.accountNumberFull || `XXXXXX${org.bankDetails.accountNumberLast4}`}
+                                          {org.bankDetails.accountNumberFull || org.bankDetails.accountNumberLast4}
                                         </span>
-                                        {org.bankDetails.accountNumberFull && (
-                                          <p className="text-xs text-gray-400 mt-0.5">Full account number (owner view only)</p>
-                                        )}
                                       </div>
                                       <div>
                                         <span className="text-gray-500">Type:</span>
@@ -980,9 +977,9 @@ export default function SuperAdminOrganizersPage() {
           <div className="flex items-start gap-3">
             <Shield className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-yellow-800">
-              <p className="font-medium mb-1">Security Notice</p>
+              <p className="font-medium mb-1">Admin Access</p>
               <p>
-                This is a read-only view. Account numbers are masked for security.
+                Full bank details are visible for manual payout processing.
                 Only organizers with verified KYC and added bank details are payout-ready.
               </p>
             </div>
