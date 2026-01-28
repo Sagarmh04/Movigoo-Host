@@ -277,8 +277,10 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
   };
 
   const getKycBadge = () => {
+    console.log("🎨 [Wizard] getKycBadge called with kycStatus:", kycStatus);
     switch (kycStatus) {
       case "verified":
+        console.log("✅ [Wizard] Rendering GREEN 'Verified' badge");
         return (
           <Badge variant="default" className="bg-green-500">
             <CheckCircle className="h-3 w-3 mr-1" />
@@ -286,6 +288,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
           </Badge>
         );
       case "pending":
+        console.log("⏳ [Wizard] Rendering YELLOW 'Pending' badge");
         return (
           <Badge variant="secondary">
             <Clock className="h-3 w-3 mr-1" />
@@ -293,6 +296,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
           </Badge>
         );
       default:
+        console.log("❌ [Wizard] Rendering RED 'Required' badge (status was:", kycStatus, ")");
         return (
           <Badge variant="destructive">
             <AlertCircle className="h-3 w-3 mr-1" />

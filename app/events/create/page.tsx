@@ -12,10 +12,13 @@ export default function CreateEventPage() {
   useEffect(() => {
     const fetchKycStatus = async () => {
       try {
+        console.log("📄 [Create Event Page] Fetching KYC status...");
         const status = await getKycStatus();
+        console.log("📄 [Create Event Page] Received KYC status:", status);
         setKycStatus(status);
+        console.log("📄 [Create Event Page] State updated to:", status);
       } catch (error) {
-        console.error("Error fetching KYC status:", error);
+        console.error("❌ [Create Event Page] Error fetching KYC status:", error);
         setKycStatus("not_started");
       } finally {
         setLoading(false);
@@ -36,5 +39,6 @@ export default function CreateEventPage() {
     );
   }
 
+  console.log("📄 [Create Event Page] Rendering wizard with kycStatus:", kycStatus);
   return <EventCreationWizard kycStatus={kycStatus} />;
 }

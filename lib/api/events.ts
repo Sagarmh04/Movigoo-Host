@@ -257,10 +257,20 @@ function getStepFromField(field: string): number {
  */
 export async function getKycStatus(): Promise<KycStatus> {
   try {
+    console.log("🔍 [KYC] Fetching KYC status...");
+    console.log("🔍 [KYC] GET_KYC_STATUS_URL:", GET_KYC_STATUS_URL);
+    
+    if (!GET_KYC_STATUS_URL) {
+      console.error("❌ [KYC] GET_KYC_STATUS_URL is not defined!");
+      return "not_started";
+    }
+    
     const headers = await getAuthHeaders();
     // Get the token explicitly to put in the body (backend expects it)
     const auth = getAuth(firebaseApp);
     const idToken = await auth.currentUser?.getIdToken();
+    
+    console.log("🔍 [KYC] Has ID Token:", !!idToken);
 
     const response = await fetch(GET_KYC_STATUS_URL, {
       method: "POST",
@@ -268,15 +278,23 @@ export async function getKycStatus(): Promise<KycStatus> {
       body: JSON.stringify({ idToken: idToken || "" }),
     });
 
+    console.log("🔍 [KYC] Response status:", response.status);
+
     if (!response.ok) {
-      console.error("Failed to fetch KYC status");
+      console.error("❌ [KYC] Failed to fetch KYC status - Response not OK");
       return "not_started";
     }
 
     const data = await response.json();
-    return data.kycStatus || "not_started";
+    console.log("✅ [KYC] Response data:", data);
+    console.log("✅ [KYC] Parsed kycStatus:", data.kycStatus);
+    
+    const status = data.kycStatus || "not_started";
+    console.log("✅ [KYC] Final status being returned:", status);
+    
+    return status;
   } catch (error) {
-    console.error("Error fetching KYC status:", error);
+    console.error("❌ [KYC] Error fetching KYC status:", error);
     return "not_started";
   }
 }
