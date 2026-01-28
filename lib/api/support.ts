@@ -173,32 +173,43 @@ export async function getAllTickets(): Promise<SupportTicket[]> {
   }
 
   const ticketsRef = collection(db, "supportTickets");
-  const q = query(ticketsRef, orderBy("updatedAt", "desc"));
+  
+  try {
+    // Try to fetch all tickets (requires admin custom claims in Firestore rules)
+    const q = query(ticketsRef, orderBy("updatedAt", "desc"));
+    const snapshot = await getDocs(q);
+    const tickets: SupportTicket[] = [];
 
-  const snapshot = await getDocs(q);
-  const tickets: SupportTicket[] = [];
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      tickets.push({
+        id: docSnap.id,
+        ticketId: data.ticketId,
+        userId: data.userId,
+        hostId: data.hostId,
+        creatorId: data.creatorId,
+        userEmail: data.userEmail,
+        userName: data.userName,
+        category: data.category,
+        subject: data.subject,
+        description: data.description,
+        status: data.status,
+        priority: data.priority,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      });
+    }
 
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
-    tickets.push({
-      id: docSnap.id,
-      ticketId: data.ticketId,
-      userId: data.userId,
-      hostId: data.hostId,
-      creatorId: data.creatorId,
-      userEmail: data.userEmail,
-      userName: data.userName,
-      category: data.category,
-      subject: data.subject,
-      description: data.description,
-      status: data.status,
-      priority: data.priority,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-    });
+    return tickets;
+  } catch (error: any) {
+    // If permission denied, fall back to user's own tickets
+    // This happens when Firestore rules don't have admin exception for support users
+    if (error.code === 'permission-denied') {
+      console.warn("Support user doesn't have admin claims. Falling back to own tickets.");
+      return getUserTickets();
+    }
+    throw error;
   }
-
-  return tickets;
 }
 
 // Get ticket messages
