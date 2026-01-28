@@ -45,6 +45,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<Partial<EventFormData>>({
     title: "",
+    organizerName: "",
     description: "",
     genres: [],
     languages: [],
@@ -54,6 +55,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
     termsAccepted: false,
     coverPhotoWide: "",
     coverPhotoPortrait: "",
+    venueMapLink: "",
     locations: [],
     status: "draft",
     lastSaved: null,

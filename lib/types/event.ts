@@ -3,6 +3,7 @@
 export interface EventFormData {
   // Basic Details (Step 1)
   title: string;
+  organizerName: string;
   description: string;
   genres: string[];
   languages: string[];
@@ -13,6 +14,7 @@ export interface EventFormData {
   termsText?: string; // Optional: event-specific terms
   coverPhotoWide: string; // URL or file path
   coverPhotoPortrait: string; // URL or file path
+  venueMapLink: string; // Google Maps URL
 
   // Schedule (Step 2)
   locations: EventLocation[];

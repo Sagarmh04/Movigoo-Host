@@ -213,6 +213,38 @@ export default function Step1BasicDetails({ data, onChange, errors }: Step1Basic
           {getError("title") && <p className="text-sm text-red-500">{getError("title")}</p>}
         </div>
 
+        {/* Organizer Name */}
+        <div className="space-y-2" data-field="organizerName">
+          <Label htmlFor="organizerName">Organizer Name / Hosted By</Label>
+          <Input
+            id="organizerName"
+            name="organizerName"
+            placeholder="Enter organizer or host name"
+            value={data.organizerName || ""}
+            onChange={(e) => onChange({ ...data, organizerName: e.target.value })}
+            className={getError("organizerName") ? "border-red-500" : ""}
+          />
+          {getError("organizerName") && (
+            <p className="text-sm text-red-500">{getError("organizerName")}</p>
+          )}
+        </div>
+
+        {/* Venue Map Link */}
+        <div className="space-y-2" data-field="venueMapLink">
+          <Label htmlFor="venueMapLink">Venue Map Link (Google Maps URL)</Label>
+          <Input
+            id="venueMapLink"
+            name="venueMapLink"
+            placeholder="Paste the Google Maps share link here..."
+            value={data.venueMapLink || ""}
+            onChange={(e) => onChange({ ...data, venueMapLink: e.target.value })}
+            className={getError("venueMapLink") ? "border-red-500" : ""}
+          />
+          {getError("venueMapLink") && (
+            <p className="text-sm text-red-500">{getError("venueMapLink")}</p>
+          )}
+        </div>
+
         {/* Description */}
         <div className="space-y-2" data-field="description">
           <Label htmlFor="description">Description *</Label>

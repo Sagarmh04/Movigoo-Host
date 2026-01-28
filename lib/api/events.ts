@@ -69,6 +69,7 @@ function formatEventForBackend(formData: Partial<EventFormData>, ticketConfigs: 
   return {
     basicDetails: {
       title: formData.title || "",
+      organizerName: formData.organizerName || "",
       description: formData.description || "",
       genres: formData.genres || [],
       languages: formData.languages || [],
@@ -80,6 +81,7 @@ function formatEventForBackend(formData: Partial<EventFormData>, ticketConfigs: 
       termsText: formData.termsText || "",
       coverWideUrl: formData.coverPhotoWide || "",
       coverPortraitUrl: formData.coverPhotoPortrait || "",
+      venueMapLink: formData.venueMapLink || "",
     },
     schedule: {
       locations: formData.locations || [],
@@ -307,6 +309,7 @@ export async function fetchEvent(eventId: string): Promise<Partial<EventFormData
     
     return {
       title: event.basicDetails?.title || "",
+      organizerName: event.basicDetails?.organizerName || "",
       description: event.basicDetails?.description || "",
       genres: event.basicDetails?.genres || [],
       languages: event.basicDetails?.languages || [],
@@ -323,6 +326,7 @@ export async function fetchEvent(eventId: string): Promise<Partial<EventFormData
       termsText: event.basicDetails?.termsText || "",
       coverPhotoWide: event.basicDetails?.coverWideUrl || "",
       coverPhotoPortrait: event.basicDetails?.coverPortraitUrl || "",
+      venueMapLink: event.basicDetails?.venueMapLink || "",
       locations: event.schedule?.locations || [],
       status: event.status || "draft",
       lastSaved: event.updatedAt 
