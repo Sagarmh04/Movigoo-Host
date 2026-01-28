@@ -25,10 +25,11 @@ const SUPPORT_EMAIL = "movigootech@gmail.com";
 
 // Generate ticket ID (SUP-10001, SUP-10002, etc.)
 async function generateTicketId(): Promise<string> {
-  const ticketsRef = collection(db, "supportTickets");
-  const snapshot = await getDocs(ticketsRef);
-  const count = snapshot.size + 10001;
-  return `SUP-${count}`;
+  // Use timestamp-based ID to avoid querying all tickets (which violates security rules)
+  // Format: SUP-[timestamp][random] to ensure uniqueness
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  return `SUP-${timestamp}${random}`;
 }
 
 // Create a new support ticket
