@@ -160,7 +160,7 @@ export default function EventListingsTab() {
                     asChild
                   >
                     <Link 
-                      href={`/events/${event.id}`}
+                      href={`https://www.movigoo.in/events/${event.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
