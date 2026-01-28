@@ -557,8 +557,7 @@ export default function EventCreationWizard({ eventId, kycStatus }: EventCreatio
             <Button
               onClick={() => {
                 setShowSuccessDialog(false);
-                // TODO: Navigate to event preview/detail page
-                router.push(`/events/${eventId || "new-id"}`);
+                window.open(`https://www.movigoo.in/event/${eventId}`, '_blank');
               }}
               className="w-full"
             >
