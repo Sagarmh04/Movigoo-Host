@@ -44,13 +44,19 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [kycStatus, setKycStatus] = useState<string>("none");
   const [isOwner, setIsOwner] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Owner email - single source of truth
   const OWNER_EMAIL = "movigoo4@gmail.com";
 
   useEffect(() => {
-    loadKycStatus();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+      setIsAuthenticated(true);
+      loadKycStatus();
       checkOwnerAccess(user);
     });
 
@@ -136,6 +142,10 @@ export default function DashboardPage() {
         { label: "Support Tickets", tabId: "support" },
       ]
     : undefined;
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">

@@ -63,9 +63,6 @@ export async function middleware(req: NextRequest) {
 
   // If cookies missing → redirect to login immediately
   if (!sessionId || !sessionKey) {
-    if (pathname === "/") {
-      return NextResponse.next();
-    }
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
